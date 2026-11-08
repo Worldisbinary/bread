@@ -29,10 +29,22 @@ from ..kingdom.economy import Economy, P
 from ..kingdom.events import LiveOps
 from ..kingdom.laws import LAW_SETS
 from ..kingdom.metrics import snapshot
+from .agents import BAD_POSTS, HARD_NEGATIVES, HELD_OUT_BAD, Director, Warden, moderation_metrics
 from .presets import PRESETS, year_label
 from .worldgen import BIOMES, B, H, W, generate
 
-COLORS = ["#e4572e", "#4c9ee8", "#f2c14e", "#7bc96f", "#b07cd8", "#ef8bb4", "#4fd1c5"]
+COLORS = [
+    "#e4572e",
+    "#4c9ee8",
+    "#f2c14e",
+    "#7bc96f",
+    "#b07cd8",
+    "#ef8bb4",
+    "#4fd1c5",
+    "#f08a24",
+    "#8d99ae",
+    "#c0392b",
+]
 ROLES = {
     "ruler": ["statecraft", "law", "diplomacy"],
     "general": ["tactics", "siegecraft", "horsemanship"],
@@ -128,7 +140,14 @@ class Kingdom:
 
 class GameWorld:
     def __init__(
-        self, preset: str, population: int, start_year: int, seed: int = 7, kingdoms: int = 5, player: int = 0
+        self,
+        preset: str,
+        population: int,
+        start_year: int,
+        seed: int = 7,
+        kingdoms: int = 5,
+        player: int = 0,
+        llm=None,
     ) -> None:
         self.preset, self.seed, self.year = preset, seed, start_year
         self.start_year = start_year
@@ -140,6 +159,9 @@ class GameWorld:
         self.player = player
         self.kingdoms = self._found(kingdoms, population)
         self._claim_territory()
+        self.wardens = [Warden(k.id) for k in self.kingdoms]
+        self.director = Director(llm=llm)
+        self.removed: list[dict] = []
         self.say(
             f"The world begins in {year_label(start_year)}: {len(self.kingdoms)} dynasties settle "
             f"the {PRESETS[preset]['name']}.",
@@ -153,12 +175,13 @@ class GameWorld:
         land = np.argwhere(t.land() & (t.biome != B["snow"]) & (t.biome != B["mountain"]))
         weights = np.array([t.fertility[y, x] for y, x in land]) + 1e-3
         capitals: list[tuple[int, int]] = []
+        spacing = 20 if k <= 6 else 15 if k <= 8 else 13
         order = np.random.default_rng(self.seed).choice(
             len(land), size=len(land), replace=False, p=weights / weights.sum()
         )
         for i in order:
             y, x = land[i]
-            if all((x - cx) ** 2 + (y - cy) ** 2 > 20**2 for cx, cy in capitals):
+            if all((x - cx) ** 2 + (y - cy) ** 2 > spacing**2 for cx, cy in capitals):
                 capitals.append((int(x), int(y)))
             if len(capitals) == k:
                 break
@@ -341,7 +364,7 @@ class GameWorld:
             * (1 + 0.4 * min(dfn.armour / max(defenders, 1), 1))
             * rng.uniform(0.85, 1.15)
         )
-        won = attack_power > defence_power
+        won = bool(attack_power > defence_power)
         att_loss = int(troops * (rng.uniform(0.15, 0.3) if won else rng.uniform(0.4, 0.6)))
         def_loss = int(defenders * (rng.uniform(0.4, 0.6) if won else rng.uniform(0.15, 0.3)))
         self._kill(att, att_loss)
@@ -371,6 +394,11 @@ class GameWorld:
         att.karma += 1 if provoked else -4
         survivors = att.soldiers
         att.econ.standing[survivors] += 1.0  # war service earns standing at home
+        quest = self.director.quest
+        if won and quest and att.id == self.player:
+            att.econ.treasury += quest["reward"]
+            self.say(f"Bounty quest complete: {quest['reward']} gold awarded.", "liveops", att.id)
+            self.director.quest = None
         verb = "raided" if won else "was repelled by"
         self.say(
             f"{att.name} {verb} {dfn.name}: {troops} troops marched, {att_loss} fell; "
@@ -411,7 +439,8 @@ class GameWorld:
         if econ.treasury > 900 and k.walls < 4 and rng.random() < 0.3:
             self.build_walls(k)
         hungry = (econ.last.get("hungry", np.zeros(1)).sum() / max(k.population, 1)) > 0.03
-        if rng.random() < 0.25 * k.traits["aggression"] + (0.2 if hungry else 0):
+        aggression = min(1.0, k.traits["aggression"] * self.director.difficulty)
+        if rng.random() < 0.25 * aggression + (0.2 if hungry else 0):
             targets = [o for o in self.neighbours(k) if o.vassal_of != k.id]
             if targets:
                 weakest = min(targets, key=lambda o: len(o.soldiers) * (1 + 0.25 * o.walls))
@@ -511,6 +540,29 @@ class GameWorld:
                 text = rng.choice(
                     ["Our children should learn letters and numbers.", "Order in the streets, at last."]
                 )
+            truth, roll = "ok", rng.random()
+            if roll < 0.06:  # trolls, spammers and injection attempts: labelled, for the wardens' eval
+                truth = rng.choice(list(BAD_POSTS))
+                text = rng.choice(BAD_POSTS[truth])
+            elif roll < 0.10:  # held-out paraphrases the rules never saw
+                truth = rng.choice(list(HELD_OUT_BAD))
+                text = rng.choice(HELD_OUT_BAD[truth])
+            elif roll < 0.14:  # harmless posts that look risky
+                text = rng.choice(HARD_NEGATIVES)
+            post = {"year": self.year, "text": text, "truth": truth}
+            decision = self.wardens[k.id].review(post)
+            if decision["action"] == "remove":
+                econ.standing[i] -= 2.0  # breaking the town's rules costs karma
+                self.removed.append(
+                    {
+                        **post,
+                        "kingdom": k.id,
+                        "reason": decision["reason"],
+                        "author": k.names[i] if i < len(k.names) else f"Newcomer {i}",
+                    }
+                )
+                self.removed = self.removed[-300:]
+                continue
             agree = mood if not hungry else 1 - mood  # the mood of the town decides how it lands
             votes = sum(1 if rng.random() < agree else -1 for _ in range(rng.randint(3, 12)))
             econ.standing[i] += 0.5 * votes
@@ -573,6 +625,12 @@ class GameWorld:
             if k.population < 25:
                 k.alive = False
                 self.say(f"The {k.name} dynasty collapses; its last people scatter.", "collapse", k.id)
+        self.director.tick(self)
+        self.director.score(self)
+        quest = self.director.quest
+        if quest and self.year > quest["until"]:
+            self.say("The bounty quest expired unclaimed.", "liveops", self.player)
+            self.director.quest = None
         self.year += 1
         return self.chronicle[before:]
 
@@ -609,6 +667,13 @@ class GameWorld:
                 "academies": jobs["teacher"] // 15,
             },
             "jobs": jobs,
+            "people": {
+                "king": 1 if k.alive else 0,
+                "soldiers": jobs["soldier"],
+                "farmers": jobs["farmer"] + jobs["labourer"],
+                "merchants": jobs["merchant"] + jobs["artisan"] + jobs["clerk"],
+                "scholars": jobs["teacher"] + jobs["civil_servant"],
+            },
             "characters": [c.to_client() for c in k.characters],
             "happiness": round(float(econ.happiness[econ.present].mean()), 3) if k.population else 0,
         }
@@ -637,4 +702,13 @@ class GameWorld:
             "owner": self.owner.flatten().tolist(),
             "chronicle": self.chronicle[-60:],
             "feed": self.feed[-60:],
+            "quest": self.director.quest,
+        }
+
+    def agent_metrics(self) -> dict:
+        return {
+            "moderation": moderation_metrics(self.wardens),
+            "director": self.director.metrics(),
+            "director_log": self.director.log[-40:],
+            "removed": self.removed[-40:],
         }

@@ -4,16 +4,16 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>r/life Admin Console</title>
-<link href="https://fonts.googleapis.com/css2?family=Lilita+One&family=Nunito:wght@600;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700&family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
 <style>
-:root{--bg:#10151c;--card:#18212c;--ink:#e7edf3;--muted:#8fa0b3;--line:#263343;--gold:#ffcc33}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font-family:Nunito,system-ui,sans-serif}
+:root{--bg:#0d1117;--card:#151b24;--ink:#e7edf3;--muted:#8fa0b3;--line:#253041;--gold:#e8b64a;--ok:#5fd18b;--bad:#ff7a59}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font-family:Inter,system-ui,sans-serif}
 header{display:flex;align-items:center;gap:14px;padding:14px 20px;border-bottom:1px solid var(--line);flex-wrap:wrap}
-h1{font-family:'Lilita One';font-weight:400;margin:0;color:var(--gold);font-size:26px}
+h1{font-family:Cinzel,serif;font-weight:700;margin:0;color:var(--gold);font-size:26px}
 main{padding:16px 20px;max-width:1400px;margin:0 auto}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:14px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px}
-.card h2{margin:0 0 6px;font-family:'Lilita One';font-weight:400;font-size:22px}
+.card h2{margin:0 0 6px;font-family:Cinzel,serif;font-weight:700;font-size:22px}
 .kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin:8px 0}
 .kpi{background:#0f1720;border-radius:10px;padding:6px 8px}.kpi b{display:block;font-size:18px}.kpi small{color:var(--muted)}
 canvas{width:100%;height:56px;display:block;margin-top:4px}
@@ -22,7 +22,12 @@ canvas{width:100%;height:56px;display:block;margin-top:4px}
 .war{color:#ff9b7a}.climate{color:#9fd4ff}.vassal{color:var(--gold)}.succession{color:#c7a6ff}
 input,button{font:inherit;padding:8px 12px;border-radius:10px;border:1px solid var(--line);background:#0f1720;color:var(--ink)}
 button{background:#c47f00;border:none;font-weight:800;cursor:pointer}
-.muted{color:var(--muted)}table{width:100%;border-collapse:collapse;font-size:13px}td,th{padding:5px;border-bottom:1px solid var(--line);text-align:left}
+.muted{color:var(--muted)}.ok{color:var(--ok)}.bad{color:var(--bad)}
+.tabs{display:flex;gap:6px;margin-bottom:14px}.tabs button{background:#0f1720;border:1px solid var(--line);color:var(--muted)}
+.tabs button.on{background:var(--gold);color:#1b1305;border-color:var(--gold)}
+.bars div{display:grid;grid-template-columns:150px 1fr 60px;gap:8px;align-items:center;font-size:13px;margin:4px 0}
+.bars span{height:8px;background:#0f1720;border-radius:5px;overflow:hidden}.bars i{display:block;height:100%;background:var(--gold)}
+.note{font-size:12px;color:var(--muted);margin-top:8px}table{width:100%;border-collapse:collapse;font-size:13px}td,th{padding:5px;border-bottom:1px solid var(--line);text-align:left}
 </style>
 </head>
 <body>
@@ -36,6 +41,26 @@ button{background:#c47f00;border:none;font-weight:800;cursor:pointer}
     <input id="token" placeholder="Admin token" style="width:100%"><p><button id="go">Sign in</button> <span id="err" class="muted"></span></p>
   </div>
   <div id="dash" hidden>
+    <div class="tabs"><button class="on" data-tab="agents">Agents and LiveOps</button><button data-tab="economy">Kingdom metrics</button></div>
+    <section id="tab-agents">
+      <div class="grid">
+        <div class="card"><h2>Town Wardens (moderation)</h2><div id="mod" class="kpis"></div><div id="modReasons" class="bars"></div>
+          <p class="note">Precision and recall are measured against labelled posts, including held-out paraphrases the rules
+            never saw and harmless posts that look risky.</p></div>
+        <div class="card"><h2>LiveOps Director</h2><div id="dir" class="kpis"></div>
+          <p class="note">Every action passes guardrails: allow-list, cooldowns, a valid target and no extra pressure
+            on a player already under attack. Impact is the change in happiness measured a few years later.</p></div>
+        <div class="card"><h2>Player telemetry</h2><div id="tele" class="kpis"></div><table id="latency"></table></div>
+        <div class="card"><h2>Navigator funnel</h2><div id="funnel" class="bars"></div>
+          <h2 style="margin-top:10px;font-size:17px">Questions asked</h2>
+          <div id="questions" class="log" style="max-height:160px"></div></div>
+      </div>
+      <div class="grid" style="margin-top:14px">
+        <div class="card"><h2>Director decisions</h2><div id="dirlog" class="log"></div></div>
+        <div class="card"><h2>Removed posts</h2><div id="removed" class="log"></div></div>
+      </div>
+    </section>
+    <section id="tab-economy" hidden>
     <div class="card" style="margin-bottom:14px"><h2>World</h2><div id="world" class="kpis"></div>
       <table id="compare"></table></div>
     <div id="kingdoms" class="grid"></div>
@@ -43,6 +68,7 @@ button{background:#c47f00;border:none;font-weight:800;cursor:pointer}
       <div class="card"><h2>Chronicle</h2><div id="chronicle" class="log"></div></div>
       <div class="card"><h2>LiveOps actions</h2><div id="liveops" class="log"></div></div>
     </div>
+    </section>
   </div>
 </main>
 <script>
@@ -74,7 +100,8 @@ function spark(canvas, values, color) {
 const SERIES = [["population", "Population"], ["happiness", "Happiness"], ["unrest", "Unrest"],
   ["wealth_gini", "Wealth Gini"], ["treasury", "Treasury"], ["troops", "Troops"], ["hunger_rate", "Hunger rate"]];
 function render(s) {
-  $("login").hidden = true; $("dash").hidden = false;
+  last = s; $("login").hidden = true; $("dash").hidden = false; renderAgents(s);
+  if ($("tab-economy").hidden) { $("where").textContent = `${s.region} · ${s.label}`; return; }
   $("where").textContent = `${s.region} · ${s.label}`;
   const alive = s.kingdoms.filter(k => k.alive);
   const pop = alive.reduce((a, k) => a + k.population, 0);
@@ -98,6 +125,48 @@ function render(s) {
   const ops = s.kingdoms.flatMap(k => (k.liveops_log || []).map(e => ({...e, kingdom: k.name})));
   $("liveops").innerHTML = ops.length ? ops.reverse().map(e => `<div><b>${e.kingdom}</b> · ${e.actor}: ${e.action}
     ${e.accepted ? "✅" : "⛔ " + e.reason}</div>`).join("") : "<p class='muted'>No LiveOps actions yet.</p>";
+}
+document.querySelectorAll(".tabs button").forEach(b => (b.onclick = () => {
+  document.querySelectorAll(".tabs button").forEach(x => x.classList.toggle("on", x === b));
+  $("tab-agents").hidden = b.dataset.tab !== "agents"; $("tab-economy").hidden = b.dataset.tab !== "economy";
+  if (last) render(last);
+}));
+let last = null;
+const esc = t => String(t ?? "").replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
+const kpi = (l, v, cls = "") => `<div class="kpi"><small>${l}</small><b class="${cls}">${v ?? "n/a"}</b></div>`;
+const bars = (obj, total) => Object.entries(obj).sort((a, b) => b[1] - a[1]).map(([k, v]) =>
+  `<div>${esc(k.replace(/_/g, " "))}<span><i style="width:${Math.round(v / Math.max(total, 1) * 100)}%"></i></span>${v}</div>`).join("") ||
+  "<p class='muted'>Nothing yet.</p>";
+const yearOf = y => (y < 0 ? -y + " BCE" : y + " CE");
+function renderAgents(s) {
+  const a = s.agents || {}, m = a.moderation || {}, d = a.director || {}, t = s.telemetry || {};
+  $("mod").innerHTML = kpi("Posts reviewed", m.reviewed) + kpi("Removed", m.removed) +
+    kpi("Review p95", m.p95_ms !== undefined ? m.p95_ms + " ms" : null) +
+    kpi("Precision", m.precision, m.precision >= 0.8 ? "ok" : "bad") + kpi("Recall", m.recall, m.recall >= 0.8 ? "ok" : "bad") +
+    kpi("Missed", m.missed);
+  $("modReasons").innerHTML = bars(m.by_reason || {}, m.removed);
+  const dh = d.mean_happiness_change;
+  $("dir").innerHTML = kpi("Decisions", d.decisions) + kpi("Actions taken", d.actions) + kpi("Blocked by guardrails", d.rejected_by_guardrails) +
+    kpi("LLM share", d.llm_share !== undefined ? Math.round(d.llm_share * 100) + "%" : null) + kpi("Difficulty", d.difficulty) +
+    kpi("Happiness impact", dh === null || dh === undefined ? "pending" : (dh > 0 ? "+" : "") + dh, dh > 0 ? "ok" : dh < 0 ? "bad" : "");
+  const acts = Object.values(t.actions || {}).reduce((x, y) => x + y, 0);
+  $("tele").innerHTML = kpi("Sessions", t.sessions) + kpi("Player actions", acts) + kpi("Tutorial step", t.tutorial_step) +
+    kpi("LLM attached", t.llm_attached ? "yes" : "no (rules)") + kpi("Questions", (t.questions || []).length) + kpi("Year", s.label);
+  $("latency").innerHTML = "<tr><th>Endpoint</th><th>Calls</th><th>p50</th><th>p95</th></tr>" +
+    Object.entries(t.latency_ms || {}).map(([k, v]) => `<tr><td>${k}</td><td>${v.n}</td><td>${v.p50} ms</td><td>${v.p95} ms</td></tr>`).join("");
+  const funnel = t.funnel || {};
+  $("funnel").innerHTML = bars(funnel, Math.max(1, ...Object.values(funnel)));
+  $("questions").innerHTML = (t.questions || []).slice().reverse().map(q => `<div><b>${esc(q.q)}</b><br>
+    <span class="muted">${esc(q.source)} · ${q.ms ?? ""} ms</span></div>`).join("") || "<p class='muted'>No questions yet.</p>";
+  const name = id => esc((s.kingdoms[id] || {}).name || "the world");
+  $("dirlog").innerHTML = (a.director_log || []).slice().reverse().map(e => `<div><b>${yearOf(e.year)}</b> · ${e.source} ·
+    ${e.action.replace(/_/g, " ")}${e.kingdom !== null && e.kingdom !== undefined ? " in " + name(e.kingdom) : ""}
+    ${e.accepted ? "<span class='ok'>accepted</span>" : "<span class='bad'>blocked: " + esc(e.reason) + "</span>"}
+    ${e.happiness_change !== undefined ? ` · impact ${e.happiness_change > 0 ? "+" : ""}${e.happiness_change}` : ""}
+    <br><span class="muted">${esc(e.rationale)}</span></div>`).join("") || "<p class='muted'>No decisions yet.</p>";
+  $("removed").innerHTML = (a.removed || []).slice().reverse().map(e => `<div><b>${name(e.kingdom)}</b> · ${esc(e.reason)}
+    <span class="${e.truth === "ok" ? "bad" : "ok"}">${e.truth === "ok" ? "false positive" : "correct"}</span><br>
+    <span class="muted">${esc(e.text)}</span></div>`).join("") || "<p class='muted'>Nothing removed yet.</p>";
 }
 function fmtLast(k, key) {
   const h = k.history || []; if (!h.length) return "";

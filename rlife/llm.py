@@ -246,7 +246,7 @@ class OpenAICompatibleLLM:
             if exc.code == 400 and "json_validate_failed" in detail:
                 raise _BadJSON() from exc
             raise LLMError(f"HTTP {exc.code}: {detail}") from exc
-        except urllib.error.URLError as exc:
+        except (urllib.error.URLError, TimeoutError, ConnectionError) as exc:  # network blips are retryable
             raise _Retry(5.0) from exc
 
 

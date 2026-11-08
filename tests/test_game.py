@@ -1,3 +1,5 @@
+import json
+
 import numpy as np
 from fastapi.testclient import TestClient
 
@@ -50,6 +52,9 @@ def test_attacks_need_supplies_and_reach():
     if world.attack_requirements(me, near)["in_reach"]:
         assert result["ok"] and result["troops"] > 0
         assert any(e["kind"] == "war" and e["attacker"] == me.id for e in world.chronicle)
+    # every response the API sends after a battle must be plain JSON (numpy scalars once broke /state)
+    json.dumps(result)
+    json.dumps(world.state(admin=True) | {"agents": world.agent_metrics()})
 
 
 def test_api_keeps_metrics_admin_only(tmp_path, monkeypatch):

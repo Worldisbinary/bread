@@ -5,89 +5,98 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>r/life: Ages of Kingdoms</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Lilita+One&family=Nunito:wght@600;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700;900&family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/game/static/style.css">
-<script src="https://cdn.jsdelivr.net/npm/phaser@3.80.1/dist/phaser.min.js"></script>
+<script type="importmap">
+{"imports": {"three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+             "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}
+</script>
 </head>
 <body>
-<div id="game"></div>
+<div id="scene"></div>
+<div id="labels"></div>
 
 <!-- Start menu -->
-<div id="menu" class="overlay">
-  <div class="panel big">
-    <h1 class="title">r/life <span>Ages of Kingdoms</span></h1>
-    <p class="sub">Found a world on a real river valley, choose when history begins, and rule one dynasty among many.
-      Every citizen works, eats, votes, earns karma and remembers. Kingdoms trade, starve, flourish and go to war.</p>
-    <h3>1. Choose a region</h3>
-    <div id="regions" class="cards"></div>
-    <div class="row">
-      <label>2. Start year <b id="yearLabel"></b><input id="year" type="range"></label>
-      <label>3. Population <b id="popLabel">2,000</b><input id="pop" type="range" min="500" max="6000" step="100" value="2000"></label>
-      <label>Kingdoms <b id="kLabel">5</b><input id="kcount" type="range" min="3" max="7" value="5"></label>
-      <label>Seed <input id="seed" type="number" value="7" class="seed"></label>
-    </div>
-    <div class="row center">
-      <button id="found" class="btn gold">Found the world</button>
-      <button id="continue" class="btn blue hidden">Continue saved world</button>
+<section id="menu" class="overlay">
+  <div class="panel wide">
+    <div class="brand"><div class="crest-big">⚜</div><div><h1>Ages of Kingdoms</h1>
+      <p class="tag">An r/life world: rival dynasties, living people, agentic LiveOps.</p></div></div>
+    <div class="grid2">
+      <div>
+        <h3>Region</h3>
+        <div id="regions" class="regions"></div>
+      </div>
+      <div class="settings">
+        <h3>World settings</h3>
+        <label>Start year <output id="yearLabel"></output><input id="year" type="range"></label>
+        <label>Kingdoms <output id="kLabel">7</output><input id="kcount" type="range" min="5" max="10" value="7"></label>
+        <label>Population <output id="popLabel">3,500</output><input id="pop" type="range" min="1000" max="6000" step="100" value="3500"></label>
+        <label>Seed <input id="seed" type="number" value="7"></label>
+        <div class="buttons"><button id="found" class="cta">Found the world</button>
+          <button id="continue" class="ghost hidden">Continue saved world</button></div>
+        <p class="fine">Geography is stylised from the real region. Dynasty names are fictional.</p>
+      </div>
     </div>
   </div>
-</div>
+</section>
 
 <!-- Dynasty chooser -->
-<div id="chooser" class="overlay hidden">
-  <div class="panel big">
-    <h2 class="title small">Choose your dynasty</h2>
-    <div id="dynasties" class="cards"></div>
-  </div>
-</div>
+<section id="chooser" class="overlay hidden">
+  <div class="panel wide"><h2>Choose your dynasty</h2><div id="dynasties" class="dynasties"></div></div>
+</section>
 
 <!-- HUD -->
 <div id="hud" class="hidden">
-  <div id="crest" class="pill crest"><span id="crestDot"></span><b id="myName"></b><small id="myLaws"></small>
-    <span class="karma" title="Dynasty karma">☯ <b id="myKarma">0</b></span></div>
-  <div id="resources">
-    <div class="res" title="Gold (treasury)"><i>🪙</i><b id="gold">0</b></div>
-    <div class="res" title="Royal granary"><i>🌾</i><b id="food">0</b></div>
-    <div class="res" title="Armour"><i>🛡️</i><b id="armour">0</b></div>
-    <div class="res" title="Army energy"><i>⚡</i><b id="energy">0</b><span class="bar"><span id="energyBar"></span></span></div>
-    <div class="res" title="Troops"><i>⚔️</i><b id="troops">0</b></div>
-    <div class="res" title="Population"><i>👥</i><b id="people">0</b></div>
-    <div class="res" title="Happiness"><i>😊</i><b id="happy">0</b></div>
+  <header id="topbar">
+    <div id="crest"><span id="crestDot"></span><div><b id="myName"></b><small id="myLaws"></small></div>
+      <span class="badge" title="Dynasty karma">☯ <b id="myKarma">0</b></span></div>
+    <div id="resources"></div>
+    <div id="clock"><b id="yearNow"></b>
+      <button class="icon" id="pause" title="Pause">❚❚</button>
+      <button class="icon" id="play" title="Play">▶</button>
+      <button class="icon" id="fast" title="Fast forward">▶▶</button>
+      <button class="icon" id="stepBtn" title="Advance one year">+1</button>
+      <button class="icon" id="sound" title="Sound and voice">🔊</button>
+    </div>
+  </header>
+
+  <aside id="realms"><h4>Realms</h4><div id="realmList"></div></aside>
+
+  <footer id="actions">
+    <button class="act" data-act="train"><i>⚔</i><span>Train troops</span><small>gold + grain</small></button>
+    <button class="act" data-act="forge"><i>🛡</i><span>Forge armour</span><small>1.5 gold each</small></button>
+    <button class="act" data-act="walls"><i>🏰</i><span>Raise walls</span><small id="wallCost"></small></button>
+    <button class="act" data-act="harvest_festival"><i>🎉</i><span>Festival</span><small>happiness</small></button>
+    <button class="act" data-act="grain_reserve_release"><i>🌾</i><span>Open granary</span><small>prices down</small></button>
+    <button class="act danger" id="attackBtn"><i>🔥</i><span>Attack</span><small>choose a realm</small></button>
+  </footer>
+
+  <div id="navigator">
+    <div class="avatar" id="navAvatar"></div>
+    <div class="navbody">
+      <div class="navhead"><b>Vira</b><small>Royal Navigator</small><span id="navStep"></span></div>
+      <p id="navText"></p>
+      <p id="navTip" class="tip hidden"></p>
+      <div class="navrow"><button id="navNext" class="mini">Next</button>
+        <form id="askForm"><input id="askInput" placeholder="Ask Vira about the game…" maxlength="200"><button class="mini">Ask</button></form>
+        <button id="navHide" class="mini ghost">Hide</button></div>
+    </div>
   </div>
-  <div id="clock" class="pill"><b id="yearNow"></b>
-    <button class="mini" id="pause" title="Pause">⏸</button>
-    <button class="mini" id="play" title="Play">▶</button>
-    <button class="mini" id="fast" title="Fast">⏩</button>
-    <button class="mini" id="stepBtn" title="Next year">+1</button>
-  </div>
-  <div id="actions">
-    <button class="btn green" data-act="train">⚔️<span>Train troops</span><small>2 gold + ½ grain each</small></button>
-    <button class="btn steel" data-act="forge">🛡️<span>Forge armour</span><small>1.5 gold each</small></button>
-    <button class="btn stone" data-act="walls">🏰<span>Raise walls</span><small id="wallCost"></small></button>
-    <button class="btn purple" data-act="harvest_festival">🎉<span>Festival</span><small>happiness up</small></button>
-    <button class="btn gold" data-act="grain_reserve_release">🌾<span>Open granary</span><small>prices down</small></button>
-    <button class="btn red" id="attackBtn">🔥<span>Attack</span><small>pick a kingdom</small></button>
-  </div>
-  <div id="chronicle" class="pill log"></div>
+  <button id="navShow" class="hidden">Vira</button>
+
+  <div id="chronicle"></div>
   <div id="toast"></div>
 </div>
 
-<!-- Inspector -->
-<div id="inspector" class="side hidden">
-  <button class="close" id="closeInspector">✕</button>
-  <div id="inspectorBody"></div>
-</div>
+<aside id="inspector" class="hidden"><button class="close" id="closeInspector">✕</button><div id="inspectorBody"></div></aside>
 
-<!-- Attack modal -->
-<div id="attackModal" class="overlay hidden">
-  <div class="panel">
-    <h2 class="title small" id="attackTitle">Attack</h2>
-    <div id="attackBody"></div>
-    <div class="row center"><button class="btn red" id="launch">Launch attack</button>
-      <button class="btn stone" id="cancelAttack">Cancel</button></div>
-  </div>
-</div>
+<section id="attackModal" class="overlay hidden">
+  <div class="panel"><h2 id="attackTitle">Attack</h2><div id="attackBody"></div>
+    <div class="buttons"><button class="cta danger" id="launch">Launch attack</button><button class="ghost" id="cancelAttack">Cancel</button></div></div>
+</section>
 
-<script src="/game/static/game.js"></script>
+<div id="loading" class="overlay hidden"><div class="spinner"></div><p id="loadingText">Shaping the land…</p></div>
+
+<script type="module" src="/game/static/game.js"></script>
 </body>
 </html>
