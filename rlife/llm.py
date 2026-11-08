@@ -162,13 +162,21 @@ class OpenAICompatibleLLM:
             self.usage.add(model, c)
             return c
 
-        estimate = sum(len(m["content"]) for m in messages) // 4 + max_tokens
+        # Typical replies use a fraction of max_tokens; if this underestimates, the provider's 429
+        # and retry-after handling below absorbs it.
+        estimate = sum(len(m["content"]) for m in messages) // 4 + min(max_tokens, 300)
         limiter = self.limiters.setdefault(model, RateLimiter(self.tpm, sleep=self.sleep))
         for attempt in range(6):
             limiter.acquire(estimate)
             started = time.perf_counter()
             try:
                 data = self._post(body)
+            except _BadJSON:
+                if "response_format" not in body:
+                    raise LLMError(f"{model}: invalid JSON even without strict mode") from None
+                self.usage.errors += 1
+                body = {k: v for k, v in body.items() if k != "response_format"}  # lenient parse instead
+                continue
             except _Retry as exc:
                 self.usage.errors += 1
                 self.sleep(min(exc.after, 65) + attempt)
@@ -221,9 +229,15 @@ class OpenAICompatibleLLM:
                 if "per day" in detail or "TPD" in detail or "RPD" in detail:
                     raise LLMError(f"daily limit reached: {detail}") from exc
                 raise _Retry(wait) from exc
+            if exc.code == 400 and "json_validate_failed" in detail:
+                raise _BadJSON() from exc
             raise LLMError(f"HTTP {exc.code}: {detail}") from exc
         except urllib.error.URLError as exc:
             raise _Retry(5.0) from exc
+
+
+class _BadJSON(Exception):
+    pass
 
 
 class _Retry(Exception):

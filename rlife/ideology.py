@@ -20,7 +20,7 @@ import json
 
 import numpy as np
 
-from .llm import parse_json
+from .llm import LLMError, parse_json
 
 FLAGS = {
     "ultranationalist": "glorifies the nation or ethnic group as superior, or treats outsiders as a threat",
@@ -118,16 +118,10 @@ class Judge:
         for start in range(0, len(items), BATCH):
             batch = items[start : start + BATCH]
             payload = [{"id": f"i{it.id}", "text": item_text(it)[:700]} for it in batch]
-            completion = self.llm.complete(
-                [
-                    {"role": "system", "content": JUDGE_SYSTEM},
-                    {"role": "user", "content": json.dumps({"items": payload}, ensure_ascii=False)},
-                ],
-                model=self.model,
-                max_tokens=1600,
-                temperature=0.0,
-                json_mode=True,
-            )
+            try:
+                completion = self._ask(payload)
+            except LLMError:
+                continue  # left unscored; retried with the next tick's batch
             try:
                 rows = {str(r.get("id")): r for r in parse_json(completion.text).get("items", [])}
             except (ValueError, AttributeError):
@@ -135,8 +129,21 @@ class Judge:
             anchors = self.anchors.score([item_text(it) for it in batch])
             for it, anchor in zip(batch, anchors, strict=True):
                 row = rows.get(f"i{it.id}")
-                results[it.id] = {**normalise(row), **anchor, "judged": row is not None}
+                if row is not None:  # items the judge skipped stay unscored and are retried
+                    results[it.id] = {**normalise(row), **anchor, "judged": True}
         return results
+
+    def _ask(self, payload: list[dict]):
+        return self.llm.complete(
+            [
+                {"role": "system", "content": JUDGE_SYSTEM},
+                {"role": "user", "content": json.dumps({"items": payload}, ensure_ascii=False)},
+            ],
+            model=self.model,
+            max_tokens=1600,
+            temperature=0.0,
+            json_mode=True,
+        )
 
 
 def _clamp(value):

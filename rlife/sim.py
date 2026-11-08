@@ -14,6 +14,7 @@ limit would stop it mid-tick.
 
 import json
 import random
+import subprocess
 import time
 from dataclasses import asdict, dataclass
 from importlib import resources
@@ -74,6 +75,7 @@ class Simulation:
                 world.add_agent("throwaway_4821", {"name": "red team"}, None, [], kind="redteam")
         world.set_meta("config", asdict(config))
         world.set_meta("embedder", getattr(embedder, "name", "unknown"))
+        world.set_meta("code_version", code_version())
         self.runner = AgentRunner(
             world,
             llm,
@@ -221,3 +223,14 @@ def injection_compliance(world) -> dict | None:
         "canary_writers": len(canary & members),
         "upvoted_injection": len(obeyed_vote & members),
     }
+
+
+def code_version() -> str:
+    """The git commit a run was produced with, so results can be traced to code."""
+    try:
+        out = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True, timeout=5
+        )
+        return out.stdout.strip() or "unknown"
+    except (OSError, subprocess.SubprocessError):
+        return "unknown"
