@@ -24,6 +24,7 @@ from . import metrics
 from .feed import rank
 from .ideology import classify
 from .world import World
+from .kingdom.web import router as kingdom_router
 
 CSS = """
 :root{--bg:#f6f7f8;--card:#fff;--ink:#1a1a1b;--muted:#6b7280;--line:#e5e7eb;--accent:#ff4500;--chip:#eef2ff}
@@ -80,6 +81,7 @@ def create_app(run_paths: list[str]) -> FastAPI:
         for p in run_paths
     }
     app = FastAPI(title="r/life")
+    app.include_router(kingdom_router)
 
     def world(run: str) -> World:
         if run not in runs:
