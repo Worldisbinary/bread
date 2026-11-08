@@ -1,154 +1,164 @@
-"""A/B Experiment Harness for Kingdom LiveOps.
+"""Kingdom experiments: LiveOps-style A/B tests with real confidence intervals.
 
-Directly addresses Chaos Engine JD:
-"agentic systems that run LiveOps across A/B experiments, game difficulty,
-game economy and player retention... with guardrails, observability, evals and business impact."
+The economy is cheap, so each arm is replicated over many seeds (seed = unit of analysis),
+which gives proper uncertainty instead of one run per arm. Arms share seeds, so
+differences are paired by seed.
 
-Compares:
-- Arm A (Control): Kingdom under status-quo static governance (no LiveOps intervention)
-- Arm B (Treatment): Kingdom under autonomous Royal Steward LiveOps system
+laws     liberal vs authoritarian vs socialist, same shock schedule (a drought in season 6)
+steward  no LiveOps vs the LLM Royal Steward on the same seeds, under two droughts:
+         does an agentic LiveOps operator improve retention and happiness, and at what cost?
 
-Evaluates:
-- Player Retention (D12 / D24 survival rate of starting cohort)
-- Cumulative Churn
-- Wealth Gini Inequality
-- Population Happiness & Unrest
-- Treasury Efficiency & ROI
-
-Includes bootstrap confidence intervals and Welch's t-test / permutation significance tests.
+Results describe this model's behaviour under its stated rules, not real societies.
 """
 
 import json
-from dataclasses import asdict, dataclass
-from typing import Any, Dict, List, Optional, Tuple
+from pathlib import Path
 
 import numpy as np
-from scipy import stats
 
+from ..stats import bootstrap_ci
 from .economy import Economy
 from .events import LiveOps
-from .laws import LAW_SETS, Laws
+from .laws import LAW_SETS
 from .metrics import snapshot
-from .steward import RoyalSteward
+from .steward import Steward
+
+OUTCOMES = {
+    "retention": "Share of the original citizens still in the kingdom at the end",
+    "mean_happiness": "Average happiness over all seasons",
+    "peak_unrest": "Highest share of unhappy citizens in any season",
+    "final_gini": "Wealth inequality (Gini) at the end",
+    "hunger_seasons": "Average share of citizens hungry per season",
+    "final_treasury_per_citizen": "Treasury per citizen at the end",
+}
 
 
-@dataclass
-class ABExperimentResult:
-    n_citizens: int
-    ticks: int
-    control_snapshots: List[Dict[str, Any]]
-    treatment_snapshots: List[Dict[str, Any]]
-    control_steward_logs: List[Dict[str, Any]]
-    treatment_steward_logs: List[Dict[str, Any]]
-    stats: Dict[str, Any]
-
-
-def bootstrap_metric_diff(a: np.ndarray, b: np.ndarray, n_boot: int = 1000, ci: float = 0.95) -> Dict[str, float]:
-    """Computes bootstrap confidence interval of the mean difference (B - A)."""
-    rng = np.random.default_rng(42)
-    diffs = []
-    for _ in range(n_boot):
-        sample_a = rng.choice(a, size=len(a), replace=True)
-        sample_b = rng.choice(b, size=len(b), replace=True)
-        diffs.append(sample_b.mean() - sample_a.mean())
-    
-    alpha = (1.0 - ci) / 2.0
-    diffs = np.sort(diffs)
+def run_economy(
+    laws: str,
+    seed: int,
+    ticks: int,
+    citizens: int,
+    shocks: dict,
+    steward: Steward | None = None,
+    every: int = 2,
+) -> dict:
+    econ = Economy(citizens, LAW_SETS[laws], seed=seed)
+    ops = LiveOps(econ)
+    history = []
+    for tick in range(ticks):
+        if tick in shocks:
+            ops.shock(shocks[tick])
+        econ.step()
+        history.append(snapshot(econ))
+        if steward and tick >= 1 and tick % every == 0:
+            p = steward.propose(history, ops.log)
+            ops.apply(p["action"], p["args"], actor="steward", rationale=p["rationale"])
     return {
-        "mean_diff": float(b.mean() - a.mean()),
-        "ci_low": float(np.percentile(diffs, 100 * alpha)),
-        "ci_high": float(np.percentile(diffs, 100 * (1.0 - alpha))),
+        "retention": history[-1]["retention"],
+        "mean_happiness": float(np.mean([h["happiness"] for h in history])),
+        "peak_unrest": float(max(h["unrest"] for h in history)),
+        "final_gini": history[-1]["wealth_gini"],
+        "hunger_seasons": float(np.mean([h["hunger_rate"] for h in history])),
+        "final_treasury_per_citizen": history[-1]["treasury"] / max(history[-1]["population"], 1),
+        "actions": [e for e in ops.log if e["actor"] == "steward"],
     }
 
 
-def run_kingdom_ab_experiment(
-    n_citizens: int = 1500,
-    ticks: int = 24,
-    law_set: str = "liberal",
-    seed: int = 42,
-    difficulty: str = "normal",  # "normal" or "drought_season"
-    llm=None
-) -> ABExperimentResult:
-    """Runs a controlled A/B experiment between Static Governance and Agentic LiveOps."""
-    laws = LAW_SETS[law_set]
+def paired_test(diffs: list[float], shuffles: int = 5000, seed: int = 0) -> float:
+    """Two-sided sign-flip permutation p-value for a mean paired difference."""
+    d = np.asarray(diffs, dtype=float)
+    rng = np.random.default_rng(seed)
+    observed = abs(d.mean())
+    flips = np.abs((d * rng.choice([-1.0, 1.0], size=(shuffles, len(d)))).mean(axis=1))
+    return float((np.sum(flips >= observed - 1e-12) + 1) / (shuffles + 1))
 
-    # --- ARM A: Control (Static Policy, No Steward) ---
-    econ_control = Economy(n=n_citizens, laws=laws, seed=seed)
-    liveops_control = LiveOps(econ_control)
-    control_snapshots = []
 
-    # --- ARM B: Treatment (Royal Steward Active) ---
-    econ_treatment = Economy(n=n_citizens, laws=laws, seed=seed)
-    liveops_treatment = LiveOps(econ_treatment)
-    steward = RoyalSteward(econ_treatment, liveops_treatment, llm=llm)
-    treatment_snapshots = []
-    steward_logs = []
+def compare(rows_by_arm: dict, baseline: str) -> dict:
+    out = {"baseline": baseline, "arms": {}}
+    for arm, rows in rows_by_arm.items():
+        entry = {"n": len(rows), "outcomes": {}}
+        for key in OUTCOMES:
+            values = [r[key] for r in rows]
+            entry["outcomes"][key] = {"estimate": bootstrap_ci(values)}
+            if arm != baseline:
+                base = [r[key] for r in rows_by_arm[baseline]]
+                diffs = [a - b for a, b in zip(values, base, strict=True)]
+                entry["outcomes"][key]["vs_baseline"] = {
+                    "difference": bootstrap_ci(diffs),
+                    "p_value": paired_test(diffs),
+                }
+        out["arms"][arm] = entry
+    return out
 
-    for t in range(ticks):
-        # Apply exogenous difficulty shocks if specified (e.g. drought at tick 4)
-        if difficulty == "drought_season" and t in (4, 12):
-            liveops_control.shock("drought")
-            liveops_treatment.shock("drought")
 
-        # Control step: no LiveOps agent interventions
-        econ_control.step()
-        control_snapshots.append(snapshot(econ_control))
+def laws_experiment(seeds: int = 30, ticks: int = 24, citizens: int = 1500) -> dict:
+    shocks = {6: "drought"}
+    rows = {name: [run_economy(name, s, ticks, citizens, shocks) for s in range(seeds)] for name in LAW_SETS}
+    return compare(rows, "liberal")
 
-        # Treatment step: Steward deliberates and applies guarded LiveOps lever
-        log_entry = steward.deliberate()
-        steward_logs.append({
-            "tick": log_entry.tick,
-            "action": log_entry.proposed_action,
-            "accepted": log_entry.decision.accepted,
-            "reason": log_entry.decision.reason,
-            "analysis": log_entry.analysis,
-        })
-        econ_treatment.step()
-        treatment_snapshots.append(snapshot(econ_treatment))
 
-    # Evaluate final cohort retention and health metrics
-    control_retention = [s["retention"] for s in control_snapshots]
-    treatment_retention = [s["retention"] for s in treatment_snapshots]
-    
-    control_happiness = [s["happiness"] for s in control_snapshots]
-    treatment_happiness = [s["happiness"] for s in treatment_snapshots]
+def steward_experiment(
+    llm, model: str, seeds: int = 8, ticks: int = 16, citizens: int = 1500, laws: str = "liberal", log=print
+) -> dict:
+    shocks = {4: "drought", 10: "drought"}
+    rows = {"no_liveops": [], "steward": []}
+    for s in range(seeds):
+        base = run_economy(laws, s, ticks, citizens, shocks)
+        with_s = run_economy(laws, s, ticks, citizens, shocks, steward=Steward(llm, model))
+        rows["no_liveops"].append(base)
+        rows["steward"].append(with_s)
+        log(
+            "seed {}: retention {:.3f} -> {:.3f}, happiness {:.3f} -> {:.3f}".format(
+                s, base["retention"], with_s["retention"], base["mean_happiness"], with_s["mean_happiness"]
+            )
+        )
+    result = compare(rows, "no_liveops")
+    result["steward_actions"] = [a for r in rows["steward"] for a in r["actions"]]
+    return result
 
-    retention_diff = bootstrap_metric_diff(
-        np.array(control_retention),
-        np.array(treatment_retention)
-    )
-    happiness_diff = bootstrap_metric_diff(
-        np.array(control_happiness),
-        np.array(treatment_happiness)
-    )
 
-    t_stat_ret, p_val_ret = stats.ttest_ind(treatment_retention, control_retention)
+def _fmt(ci) -> str:
+    return "n/a" if ci is None else f"{ci[0]:.3f} [{ci[1]:.3f}, {ci[2]:.3f}]"
 
-    final_control = control_snapshots[-1]
-    final_treatment = treatment_snapshots[-1]
 
-    analysis_stats = {
-        "final_retention_control": final_control["retention"],
-        "final_retention_treatment": final_treatment["retention"],
-        "retention_relative_lift": float((final_treatment["retention"] - final_control["retention"]) / max(final_control["retention"], 1e-4)),
-        "retention_bootstrap_ci": retention_diff,
-        "retention_p_value": float(p_val_ret),
-        "final_happiness_control": final_control["happiness"],
-        "final_happiness_treatment": final_treatment["happiness"],
-        "happiness_bootstrap_ci": happiness_diff,
-        "final_gini_control": final_control["wealth_gini"],
-        "final_gini_treatment": final_treatment["wealth_gini"],
-        "final_treasury_control": final_control["treasury"],
-        "final_treasury_treatment": final_treatment["treasury"],
-        "total_steward_actions": sum(1 for e in steward_logs if e["accepted"] and e["action"] != "do_nothing")
-    }
+def render(name: str, result: dict) -> str:
+    lines = [
+        f"# Kingdom experiment: {name}",
+        "",
+        f"Baseline: `{result['baseline']}`. Seeds are the unit; differences are paired by seed. "
+        "Intervals are 95% bootstrap; p-values from sign-flip permutation. These results describe "
+        "the model's behaviour under its stated rules.",
+        "",
+    ]
+    for key, title in OUTCOMES.items():
+        lines += [
+            f"## {title}",
+            "",
+            "| Arm | n | Estimate | Difference vs baseline | p |",
+            "|---|---|---|---|---|",
+        ]
+        for arm, entry in result["arms"].items():
+            o = entry["outcomes"][key]
+            vs = o.get("vs_baseline", {})
+            p = vs.get("p_value")
+            p_text = "" if p is None else f"{p:.4f}"
+            lines.append(
+                f"| {arm} | {entry['n']} | {_fmt(o['estimate'])} | {_fmt(vs.get('difference'))} | {p_text} |"
+            )
+        lines.append("")
+    if result.get("steward_actions"):
+        counts: dict[str, int] = {}
+        for a in result["steward_actions"]:
+            key = f"{a['action']} ({'accepted' if a['accepted'] else 'rejected: ' + a['reason']})"
+            counts[key] = counts.get(key, 0) + 1
+        lines += ["## What the steward did", ""]
+        lines += [f"- {k}: {v}" for k, v in sorted(counts.items(), key=lambda x: -x[1])]
+    return "\n".join(lines) + "\n"
 
-    return ABExperimentResult(
-        n_citizens=n_citizens,
-        ticks=ticks,
-        control_snapshots=control_snapshots,
-        treatment_snapshots=treatment_snapshots,
-        control_steward_logs=[],
-        treatment_steward_logs=steward_logs,
-        stats=analysis_stats
-    )
+
+def save(name: str, result: dict, out_dir: str | Path) -> Path:
+    out = Path(out_dir) / f"kingdom-{name}"
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "report.json").write_text(json.dumps(result, indent=2, default=str))
+    (out / "report.md").write_text(render(name, result))
+    return out / "report.md"

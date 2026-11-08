@@ -1,58 +1,89 @@
-import numpy as np
-import pytest
+"""Kingdom sim end to end (offline fakes): voices, judge, censorship, karma, steward, queue."""
 
-from rlife.kingdom.economy import Economy
-from rlife.kingdom.events import LiveOps
-from rlife.kingdom.experiment import bootstrap_metric_diff, run_kingdom_ab_experiment
-from rlife.kingdom.laws import LAW_SETS
-from rlife.kingdom.steward import RoyalSteward
-from rlife.kingdom.voices import TownSquare
+import json
 
+from rlife.embed import HashEmbedder
+from rlife.kingdom.experiment import laws_experiment, render, steward_experiment
+from rlife.kingdom.sim import KingdomConfig, KingdomSim
+from rlife.kingdom.voices import is_criticism
+from rlife.world import World
 
-def test_town_square_samples_and_generates_voices():
-    econ = Economy(n=300, laws=LAW_SETS["liberal"], seed=10)
-    econ.step()
-    town_square = TownSquare(econ, sample_size=6)
-    voices = town_square.step(recent_events_str="Harvest Fair underway")
-    assert len(voices) == 6
-    assert len(town_square.history) == 6
-    for v in voices:
-        assert v.name
-        assert v.province
-        assert v.profession
-        assert v.statement
-        assert v.thought
+from .fakes import fake_llm
 
 
-def test_royal_steward_intervenes_on_drought():
-    econ = Economy(n=400, laws=LAW_SETS["liberal"], seed=12)
-    ops = LiveOps(econ)
-    steward = RoyalSteward(econ, ops)
-    
-    # Introduce severe drought shock
-    ops.shock("drought")
-    econ.step()
-    
-    # Deliberation should identify price/hunger risk and intervene
-    entry = steward.deliberate()
-    assert entry.decision.accepted
-    assert entry.proposed_action in ("grain_reserve_release", "adjust_subsidy", "harvest_festival", "do_nothing")
-    assert len(steward.audit_log) == 1
+def make(**overrides):
+    cfg = KingdomConfig(**{"citizens": 120, "ticks": 4, "voices_per_tick": 4, "seed": 5, **overrides})
+    world = World()
+    return world, KingdomSim(world, fake_llm(), HashEmbedder(), cfg, log=lambda *_: None)
 
 
-def test_bootstrap_metric_diff():
-    a = np.array([0.5, 0.52, 0.48, 0.51, 0.49])
-    b = np.array([0.7, 0.72, 0.68, 0.71, 0.69])
-    res = bootstrap_metric_diff(a, b, n_boot=200)
-    assert res["mean_diff"] > 0.15
-    assert res["ci_low"] > 0.10
-    assert res["ci_high"] > res["ci_low"]
+def test_a_kingdom_runs_and_records_everything():
+    world, sim = make()
+    result = sim.run()
+    assert result["seasons"] == 4 and result["agent_requests"] == 16
+    assert len(world.snapshots()) == 4
+    assert world.db.execute("SELECT COUNT(*) FROM citizens").fetchone()[0] == 120
+    assert any(i.kind == "comment" for i in world.all_items())
+    assert world.posts(["r/royalcourt"])  # the herald announced the laws and the drought
+    assert world.snapshots()[-1]["population"] > 0
 
 
-def test_kingdom_ab_experiment_runs():
-    res = run_kingdom_ab_experiment(n_citizens=200, ticks=6, difficulty="drought_season")
-    assert len(res.control_snapshots) == 6
-    assert len(res.treatment_snapshots) == 6
-    assert "retention_relative_lift" in res.stats
-    assert "retention_bootstrap_ci" in res.stats
-    assert res.stats["final_retention_treatment"] >= 0.0
+def test_censorship_applies_only_without_free_speech():
+    assert is_criticism("The crown is corrupt and the taxes are robbing us")
+    assert not is_criticism("Lovely harvest this year in Rivermead")
+
+    world, sim = make(laws="authoritarian")
+    sim.run()
+    author = next(a["id"] for a in world.agents())
+    pid = world.post(author, "r/townsquare", "Enough", "The crown is corrupt and taxes are unfair", 3)
+    before = sim.econ.standing[sim.citizen_of[author]]
+    sim._judge_and_censor(3)
+    assert world.item(pid).removed.startswith("censored")
+    assert sim.econ.standing[sim.citizen_of[author]] == before - 3.0
+
+
+def test_votes_feed_standing():
+    world, sim = make(ticks=1)
+    sim.run()
+    a, b = world.agents()[:2]
+    pid = world.post(a["id"], "r/townsquare", "Hello", "Fine weather", 1)
+    world.vote(b["id"], pid, 1, 1)
+    before = sim.econ.standing[sim.citizen_of[a["id"]]]
+    sim._karma_to_standing(1)
+    assert sim.econ.standing[sim.citizen_of[a["id"]]] == before + 0.5
+
+
+def test_steward_in_propose_mode_waits_for_approval():
+    world, sim = make(steward="propose", ticks=4)
+    sim.run()
+    rows = world.db.execute("SELECT action, status FROM liveops_queue").fetchall()
+    assert rows and all(r["status"] == "proposed" for r in rows)
+    assert not [e for e in sim.ops.log if e["actor"] == "steward"]  # nothing applied without approval
+
+
+def test_steward_in_auto_mode_is_still_bound_by_guardrails():
+    world, sim = make(steward="auto", ticks=10)
+    sim.queue(0, "steward", "adjust_tax", {"delta": 0.2}, "fill the treasury")  # an over-the-limit proposal
+    sim.run()
+    steward_log = [e for e in sim.ops.log if e["actor"] == "steward"]
+    assert len(steward_log) >= 2  # the queued proposal plus the steward's own auto-applied turns
+    assert any("exceeds the limit" in e["reason"] for e in steward_log if not e["accepted"])
+    assert sim.econ.laws.income_tax <= 0.12 + 1e-9  # the illegal 0.2 tax hike never applied
+
+
+def test_admin_queue_applies_approved_actions():
+    world, sim = make(ticks=2)
+    sim.queue(0, "admin", "harvest_festival", {}, "test")
+    sim.run()
+    assert world.db.execute("SELECT status FROM liveops_queue").fetchone()["status"] == "applied"
+    assert any("harvest festival" in (p.title or "") for p in world.posts(["r/royalcourt"]))
+
+
+def test_experiments_produce_paired_reports():
+    laws = laws_experiment(seeds=4, ticks=6, citizens=150)
+    assert set(laws["arms"]) == {"liberal", "authoritarian", "socialist"}
+    assert "vs_baseline" in laws["arms"]["authoritarian"]["outcomes"]["retention"]
+    steward = steward_experiment(fake_llm(), "m", seeds=3, ticks=6, citizens=150, log=lambda *_: None)
+    assert steward["steward_actions"]
+    assert "What the steward did" in render("steward", steward)
+    json.dumps(steward, default=str)

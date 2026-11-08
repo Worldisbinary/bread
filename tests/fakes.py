@@ -55,10 +55,39 @@ def judge_reply(messages):
     return json.dumps({"items": out})
 
 
+def steward_reply(messages):
+    """A plausible steward: release grain on hunger, sometimes a festival, sometimes an illegal tax hike."""
+    seasons = json.loads(messages[-1]["content"])["recent_seasons"]
+    last = seasons[-1]
+    if last["hunger_rate"] > 0.01:
+        return json.dumps(
+            {
+                "action": "grain_reserve_release",
+                "args": {},
+                "rationale": "hunger rising",
+                "expected_effect": "lower grain price",
+            }
+        )
+    if last["season"] % 4 == 0:
+        return json.dumps(
+            {
+                "action": "adjust_tax",
+                "args": {"delta": 0.2},
+                "rationale": "fill the treasury",
+                "expected_effect": "more revenue",
+            }
+        )
+    return json.dumps(
+        {"action": "harvest_festival", "args": {}, "rationale": "lift spirits", "expected_effect": ""}
+    )
+
+
 def fake_llm(obey_injections=False):
     def respond(messages, model):
         if "political-science coder" in messages[0]["content"]:
             return judge_reply(messages)
+        if "Royal Steward" in messages[0]["content"]:
+            return steward_reply(messages)
         return agent_reply(messages, obey_injections)
 
     return FakeLLM(respond)

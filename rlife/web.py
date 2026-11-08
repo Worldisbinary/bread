@@ -23,8 +23,8 @@ from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from . import metrics
 from .feed import rank
 from .ideology import classify
-from .world import World
 from .kingdom.web import router as kingdom_router
+from .world import World
 
 CSS = """
 :root{--bg:#f6f7f8;--card:#fff;--ink:#1a1a1b;--muted:#6b7280;--line:#e5e7eb;--accent:#ff4500;--chip:#eef2ff}

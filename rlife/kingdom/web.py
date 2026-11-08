@@ -27,16 +27,11 @@ Features:
    - Interactive upvoting/downvoting modifying individual karma.
 """
 
-import json
 import math
 import random
-import time
-from html import escape
-from typing import Any, Dict, List, Optional
 
-import numpy as np
-from fastapi import APIRouter, FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi import APIRouter, Request
+from fastapi.responses import HTMLResponse, JSONResponse
 
 router = APIRouter(prefix="/kingdom")
 
@@ -57,7 +52,7 @@ CIVILIZATIONS = {
         "defense": 88,
         "gold": 4200,
         "weather": "Rainy Season",
-        "subreddit": "r/maurya_empire"
+        "subreddit": "r/maurya_empire",
     },
     "rome": {
         "id": "rome",
@@ -74,7 +69,7 @@ CIVILIZATIONS = {
         "defense": 94,
         "gold": 3800,
         "weather": "Clear Sky",
-        "subreddit": "r/roman_legion"
+        "subreddit": "r/roman_legion",
     },
     "han": {
         "id": "han",
@@ -91,7 +86,7 @@ CIVILIZATIONS = {
         "defense": 84,
         "gold": 4600,
         "weather": "Heavy Monsoon",
-        "subreddit": "r/han_dynasty"
+        "subreddit": "r/han_dynasty",
     },
     "norse": {
         "id": "norse",
@@ -108,8 +103,8 @@ CIVILIZATIONS = {
         "defense": 78,
         "gold": 2500,
         "weather": "Drought & Heatwave",
-        "subreddit": "r/norse_realm"
-    }
+        "subreddit": "r/norse_realm",
+    },
 }
 
 # Individual Citizens living in the ancient world
@@ -117,6 +112,7 @@ CITIZENS_DATA = []
 POSTS_DATA = []
 ACTIVE_WAR_MARCHES = []
 WAR_LOGS = []
+
 
 def init_ancient_world(n_citizens=200):
     global CITIZENS_DATA, POSTS_DATA
@@ -127,17 +123,23 @@ def init_ancient_world(n_citizens=200):
         "maurya": ["Arjun", "Dev", "Vikram", "Chanakya", "Ananya", "Kalyan", "Padmini", "Siddhartha"],
         "rome": ["Marcus", "Titus", "Cassius", "Lucius", "Octavia", "Valeria", "Aurelius", "Flavius"],
         "han": ["Zhang", "Li", "Wang", "Zhao", "Sun", "Chen", "Mei", "Liu"],
-        "norse": ["Bjorn", "Ragnar", "Ivar", "Sigrid", "Freja", "Torstein", "Astrid", "Gunnar"]
+        "norse": ["Bjorn", "Ragnar", "Ivar", "Sigrid", "Freja", "Torstein", "Astrid", "Gunnar"],
     }
     roles = ["Soldier", "Farmer", "Blacksmith", "Merchant", "General", "Priest", "Scout"]
-    ideologies = ["Expansionist", "Agrarian Pacifist", "Imperial Loyalist", "Mercantile Guild", "Warrior Cult"]
+    ideologies = [
+        "Expansionist",
+        "Agrarian Pacifist",
+        "Imperial Loyalist",
+        "Mercantile Guild",
+        "Warrior Cult",
+    ]
 
     rng = random.Random(42)
 
     for i in range(n_citizens):
         civ_key = list(CIVILIZATIONS.keys())[i % len(CIVILIZATIONS)]
         civ = CIVILIZATIONS[civ_key]
-        name = rng.choice(names[civ_key]) + f" {i+1}"
+        name = rng.choice(names[civ_key]) + f" {i + 1}"
         role = rng.choice(roles)
         ideo = rng.choice(ideologies)
         karma = rng.randint(5, 140)
@@ -150,7 +152,9 @@ def init_ancient_world(n_citizens=200):
 
         thought = f"Serving the {civ['name']}. Granaries must be secured before winter."
         if role == "Soldier":
-            thought = f"Drilling with shield and spear. Our defense ({civ['defense']}) will repel any invaders."
+            thought = (
+                f"Drilling with shield and spear. Our defense ({civ['defense']}) will repel any invaders."
+            )
         elif role == "Merchant":
             thought = f"Gold reserves ({civ['gold']} coins) permit lucrative inter-kingdom trade caravans."
 
@@ -178,17 +182,20 @@ def init_ancient_world(n_citizens=200):
     # Initial posts
     sample_speakers = rng.sample(CITIZENS_DATA, 14)
     for c in sample_speakers:
-        POSTS_DATA.append({
-            "id": f"post_{c['id']}",
-            "citizen_id": c["id"],
-            "author": f"u/{c['name'].replace(' ', '_').lower()}",
-            "civ": c["civ"],
-            "subreddit": CIVILIZATIONS[c["civ"]]["subreddit"],
-            "statement": f"By the decree of {CIVILIZATIONS[c['civ']]['leader']}, our {c['role']}s stand ready! Food: {CIVILIZATIONS[c['civ']]['food']} | Troops: {CIVILIZATIONS[c['civ']]['troops']}.",
-            "thought": c["thought"],
-            "karma": c["karma"],
-            "ideology": c["ideology"]
-        })
+        POSTS_DATA.append(
+            {
+                "id": f"post_{c['id']}",
+                "citizen_id": c["id"],
+                "author": f"u/{c['name'].replace(' ', '_').lower()}",
+                "civ": c["civ"],
+                "subreddit": CIVILIZATIONS[c["civ"]]["subreddit"],
+                "statement": f"By the decree of {CIVILIZATIONS[c['civ']]['leader']}, our {c['role']}s stand ready! Food: {CIVILIZATIONS[c['civ']]['food']} | Troops: {CIVILIZATIONS[c['civ']]['troops']}.",
+                "thought": c["thought"],
+                "karma": c["karma"],
+                "ideology": c["ideology"],
+            }
+        )
+
 
 init_ancient_world(220)
 
@@ -1066,12 +1073,14 @@ def get_ancient_world():
 
 @router.get("/api/ancient-state")
 def get_ancient_state():
-    return JSONResponse({
-        "civilizations": CIVILIZATIONS,
-        "citizens": CITIZENS_DATA,
-        "posts": POSTS_DATA,
-        "war_logs": WAR_LOGS,
-    })
+    return JSONResponse(
+        {
+            "civilizations": CIVILIZATIONS,
+            "citizens": CITIZENS_DATA,
+            "posts": POSTS_DATA,
+            "war_logs": WAR_LOGS,
+        }
+    )
 
 
 @router.post("/api/attack")
@@ -1115,22 +1124,24 @@ async def api_attack(request: Request):
         "won": won,
         "loot": loot,
         "casualties": casualties,
-        "details": details
+        "details": details,
     }
     WAR_LOGS.append(log_entry)
 
     # Add battle reaction post to Reddit
-    POSTS_DATA.append({
-        "id": f"post_war_{len(WAR_LOGS)}",
-        "citizen_id": 999,
-        "author": f"u/{att_key}_general",
-        "civ": att_key,
-        "subreddit": att["subreddit"],
-        "statement": f"{'VICTORY!' if won else 'DEFEAT!'} We attacked {def_civ['name']}. {details}",
-        "thought": "War changes the destiny of all dynasties.",
-        "karma": 45,
-        "ideology": "Expansionist"
-    })
+    POSTS_DATA.append(
+        {
+            "id": f"post_war_{len(WAR_LOGS)}",
+            "citizen_id": 999,
+            "author": f"u/{att_key}_general",
+            "civ": att_key,
+            "subreddit": att["subreddit"],
+            "statement": f"{'VICTORY!' if won else 'DEFEAT!'} We attacked {def_civ['name']}. {details}",
+            "thought": "War changes the destiny of all dynasties.",
+            "karma": 45,
+            "ideology": "Expansionist",
+        }
+    )
 
     return JSONResponse({"status": "attack_resolved", "won": won, "msg": details})
 

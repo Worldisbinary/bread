@@ -42,3 +42,4 @@ testpaths = ["tests"]
 
 [tool.ruff.lint.per-file-ignores]
 "rlife/web.py" = ["E501"]  # server-rendered HTML templates
+"rlife/kingdom/web.py" = ["E501"]  # server-rendered HTML templates

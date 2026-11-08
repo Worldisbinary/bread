@@ -93,6 +93,26 @@ def main(argv=None) -> None:
     je = sub.add_parser("judge-eval", help="agreement between the judge, anchors and your hand labels")
     je.add_argument("labels", default="evals/labels.csv", nargs="?")
 
+    k = sub.add_parser("kingdom", help="run a kingdom: economy, town square, judge and LiveOps")
+    k.add_argument("--citizens", type=int, default=1500)
+    k.add_argument("--seasons", type=int, default=12)
+    k.add_argument("--laws", default="liberal", choices=["liberal", "authoritarian", "socialist"])
+    k.add_argument("--voices", type=int, default=10, help="citizens who speak each season (LLM calls)")
+    k.add_argument("--steward", default="off", choices=["off", "auto", "propose"])
+    k.add_argument("--seed", type=int, default=7)
+    k.add_argument("--budget", type=int, default=None, help="max citizen LLM turns")
+    k.add_argument("--offline", action="store_true")
+    k.add_argument("--metrics-port", type=int, default=None)
+    k.add_argument("--out", default="runs/kingdom.db")
+
+    ke = sub.add_parser("kingdom-experiment", help="replicated A/B tests on the kingdom economy")
+    ke.add_argument("name", choices=["laws", "steward"])
+    ke.add_argument("--seeds", type=int, default=None)
+    ke.add_argument("--seasons", type=int, default=None)
+    ke.add_argument("--citizens", type=int, default=1500)
+    ke.add_argument("--offline", action="store_true")
+    ke.add_argument("--out", default="runs")
+
     args = parser.parse_args(argv)
 
     if getattr(args, "metrics_port", None):
@@ -143,6 +163,43 @@ def main(argv=None) -> None:
         from .evals import judge_agreement
 
         print(json.dumps(judge_agreement(args.labels), indent=2))
+    elif args.cmd == "kingdom":
+        from .kingdom.sim import KingdomConfig, KingdomSim
+        from .world import World
+
+        cfg = KingdomConfig(
+            citizens=args.citizens,
+            ticks=args.seasons,
+            laws=args.laws,
+            seed=args.seed,
+            voices_per_tick=args.voices,
+            steward=args.steward,
+            max_agent_requests=args.budget,
+            agent_model=os.environ.get("AGENT_MODEL", "openai/gpt-oss-20b"),
+            judge_model=os.environ.get("JUDGE_MODEL", "openai/gpt-oss-120b"),
+            steward_model=os.environ.get(
+                "STEWARD_MODEL", os.environ.get("JUDGE_MODEL", "openai/gpt-oss-120b")
+            ),
+        )
+        sim = KingdomSim(World(args.out), build_llm(args.offline), build_embedder(args.offline), cfg)
+        print(json.dumps(sim.run(), indent=2, default=str))
+    elif args.cmd == "kingdom-experiment":
+        from .kingdom import experiment as kx
+
+        if args.name == "laws":
+            result = kx.laws_experiment(
+                seeds=args.seeds or 30, ticks=args.seasons or 24, citizens=args.citizens
+            )
+        else:
+            model = os.environ.get("STEWARD_MODEL", os.environ.get("JUDGE_MODEL", "openai/gpt-oss-120b"))
+            result = kx.steward_experiment(
+                build_llm(args.offline),
+                model,
+                seeds=args.seeds or 8,
+                ticks=args.seasons or 16,
+                citizens=args.citizens,
+            )
+        print(kx.save(args.name, result, args.out).read_text())
 
 
 if __name__ == "__main__":
