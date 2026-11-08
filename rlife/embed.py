@@ -17,9 +17,11 @@ class FastEmbedder:
     name = "bge-small-en-v1.5"
 
     def __init__(self, model: str = "BAAI/bge-small-en-v1.5") -> None:
+        import os
+
         from fastembed import TextEmbedding
 
-        self.model = TextEmbedding(model)
+        self.model = TextEmbedding(model, cache_dir=os.environ.get("FASTEMBED_CACHE_PATH"))
         self._cache: dict[str, np.ndarray] = {}
 
     def embed(self, texts: list[str]) -> np.ndarray:

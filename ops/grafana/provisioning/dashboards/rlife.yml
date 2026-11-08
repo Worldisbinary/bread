@@ -1,0 +1,7 @@
+apiVersion: 1
+providers:
+  - name: rlife
+    folder: r/life
+    type: file
+    options:
+      path: /var/lib/grafana/dashboards

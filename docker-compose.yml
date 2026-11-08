@@ -1,0 +1,42 @@
+# r/life stack: the web UI, an optional simulation worker, Prometheus and Grafana.
+#
+#   docker compose up -d web prometheus grafana         browse existing runs + dashboards
+#   docker compose run --rm sim experiment ranking      run an experiment (needs LLM_API_KEY in .env)
+#
+# Web UI http://localhost:8000 · Prometheus http://localhost:9090 · Grafana http://localhost:3000
+
+services:
+  web:
+    build: .
+    command: ["serve", "runs/ranking/new.db", "runs/ranking/hot.db", "runs/ranking/engagement.db"]
+    ports: ["8000:8000"]
+    volumes: ["./runs:/app/runs"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/metrics')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  sim:
+    build: .
+    profiles: ["sim"]
+    env_file: [.env]
+    command: ["experiment", "ranking", "--metrics-port", "9101", "--out", "runs"]
+    ports: ["9101:9101"]
+    volumes: ["./runs:/app/runs", "./.cache:/app/.cache"]
+
+  prometheus:
+    image: prom/prometheus:v2.53.0
+    volumes: ["./ops/prometheus.yml:/etc/prometheus/prometheus.yml:ro"]
+    ports: ["9090:9090"]
+
+  grafana:
+    image: grafana/grafana:11.1.0
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+    volumes:
+      - ./ops/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./ops/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports: ["3000:3000"]
+    depends_on: [prometheus]
