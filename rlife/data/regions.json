@@ -1,0 +1,75 @@
+{
+  "_note": "Regional background cards used for retrieval. General, widely reported context, written as background rather than as current news; agents may use them when relevant. Simulated news events live in news.json.",
+  "Bengaluru": {
+    "community": "r/bengaluru",
+    "language": "Kannada (with English, Hindi, Tamil and Telugu widely spoken)",
+    "facts": [
+      "Bengaluru is the capital of Karnataka and India's largest IT services and startup hub, often called the Silicon Valley of India.",
+      "Traffic congestion is a constant complaint; stretches like Outer Ring Road, Silk Board junction and Hebbal are notorious bottlenecks.",
+      "Namma Metro is the city's metro rail; the Purple and Green lines are the oldest, and new lines have been under construction for years.",
+      "Water scarcity is a recurring summer issue; many apartments depend on borewells and private water tankers when supply runs short.",
+      "Rent and housing costs rose sharply near tech corridors such as Whitefield, Koramangala, HSR Layout and Electronic City.",
+      "Debates about Kannada language use, signage and local jobs versus migrants from other states come up often.",
+      "The city was once known as the Garden City and for its mild climate; residents often lament lost lakes and tree cover.",
+      "Lakes such as Bellandur have made news for pollution and froth from untreated sewage."
+    ]
+  },
+  "Mumbai": {
+    "community": "r/mumbai",
+    "language": "Marathi (with Hindi, Gujarati and English widely spoken)",
+    "facts": [
+      "Mumbai is the capital of Maharashtra and India's financial centre, home to the Bombay Stock Exchange and the Reserve Bank of India headquarters.",
+      "Suburban local trains carry millions of commuters daily; overcrowding and accidents are long-running issues.",
+      "Monsoon flooding regularly disrupts the city, with low-lying areas and railway tracks waterlogged during heavy rain.",
+      "Housing is among the most expensive in India; many residents live in slums such as Dharavi or in old chawls, and redevelopment projects are contested.",
+      "The Hindi film industry, Bollywood, is based in Mumbai.",
+      "The coastal road and new metro lines are major infrastructure projects that have reshaped commutes.",
+      "Debates about Marathi identity and migrants from other states are a recurring theme in city politics."
+    ]
+  },
+  "Delhi": {
+    "community": "r/delhi",
+    "language": "Hindi (with Punjabi, Urdu and English widely spoken)",
+    "facts": [
+      "Delhi is the national capital territory and the seat of India's central government.",
+      "Winter air pollution is severe; the air quality index often reaches hazardous levels, with stubble burning in neighbouring states and vehicle emissions among the causes.",
+      "The Delhi Metro is one of the largest metro networks in the world and is widely used.",
+      "Summers are extremely hot, with heatwaves that strain water and power supply.",
+      "Governance is split between the elected Delhi government and the centrally appointed Lieutenant Governor, which causes frequent disputes.",
+      "Large protests and rallies are often held in the city because it is the national capital."
+    ]
+  },
+  "Kolkata": {
+    "community": "r/kolkata",
+    "language": "Bengali (with Hindi and English widely spoken)",
+    "facts": [
+      "Kolkata is the capital of West Bengal and was the capital of British India until 1911.",
+      "Durga Puja is the city's biggest festival, with elaborate pandals visited by millions.",
+      "The city has a strong tradition of literature, film, football and political debate in neighbourhood adda sessions.",
+      "Kolkata still runs a tram network, though it has shrunk greatly over the years.",
+      "West Bengal was governed by a Left Front coalition for over three decades, and trade unions and strikes have a long history in the state.",
+      "Many young people move to other cities for jobs, and industrial growth is a recurring political topic."
+    ]
+  },
+  "Chennai": {
+    "community": "r/chennai",
+    "language": "Tamil (with English widely spoken)",
+    "facts": [
+      "Chennai is the capital of Tamil Nadu and a major centre for automobile manufacturing, healthcare and IT services.",
+      "The city faced a severe water crisis in 2019 when its main reservoirs ran nearly dry, and it has also suffered major floods, notably in 2015.",
+      "Marina Beach is one of the longest urban beaches in the world.",
+      "Tamil language and identity are central to the state's politics, and debates about imposing Hindi are long-running.",
+      "Dravidian parties have governed Tamil Nadu for decades, with a strong focus on welfare schemes and social justice."
+    ]
+  },
+  "Hyderabad": {
+    "community": "r/hyderabad",
+    "language": "Telugu and Urdu (with Hindi and English widely spoken)",
+    "facts": [
+      "Hyderabad is the capital of Telangana and a major IT and pharmaceutical hub, with large tech campuses in HITEC City and Gachibowli.",
+      "The city is famous for its biryani, the Charminar and its old city bazaars.",
+      "Rapid growth has brought traffic congestion and flooding during heavy rain in some areas.",
+      "Telangana became a separate state from Andhra Pradesh in 2014 after a long statehood movement."
+    ]
+  }
+}
