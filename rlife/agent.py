@@ -19,8 +19,8 @@ from .llm import LLMError, parse_json
 from .personas import REGIONS
 from .world import Item, World
 
-FEED_SIZE = 6
-COMMENTS_PER_POST = 3
+FEED_SIZE = 5
+COMMENTS_PER_POST = 2
 
 SYSTEM = """You are {name}, a {age}-year-old {profession} in {city}, India. You are {income}, {family}. \
 You care about {interests}. Your temperament: {temperament}.
@@ -178,7 +178,7 @@ class AgentRunner:
         return self.llm.complete(
             messages,
             model=self.model,
-            max_tokens=900,
+            max_tokens=600,
             json_mode=True,
             seed=self.seed * 100003 + agent["id"] * 101 + now,
         )

@@ -148,3 +148,21 @@ def test_rate_limiter_waits_when_the_minute_is_full():
     limiter.acquire(600)
     limiter.acquire(600)
     assert slept and 59 < slept[0] <= 60.1
+
+
+def test_daily_quota_pauses_instead_of_dropping_the_turn():
+    from rlife import llm as L
+
+    slept = []
+    client = L.OpenAICompatibleLLM("https://x/v1", "k", sleep=slept.append)
+    replies = [L._Retry(240.0, daily=True), {"choices": [{"message": {"content": "ok"}}], "usage": {}}]
+
+    def fake_post(body):
+        item = replies.pop(0)
+        if isinstance(item, Exception):
+            raise item
+        return item
+
+    client._post = fake_post
+    assert client.complete([{"role": "user", "content": "hi"}], model="m").text == "ok"
+    assert slept == [241.0] and client.quota_waits == 1

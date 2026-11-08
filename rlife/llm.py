@@ -127,6 +127,7 @@ class OpenAICompatibleLLM:
         cache: Cache | None = None,
         reasoning_effort: str | None = "low",
         timeout: float = 60,
+        max_quota_wait_s: float = 4 * 3600,
         sleep=time.sleep,
     ) -> None:
         self.url = base_url.rstrip("/") + "/chat/completions"
@@ -137,6 +138,8 @@ class OpenAICompatibleLLM:
         self.timeout = timeout
         self.sleep = sleep
         self.limiters: dict[str, RateLimiter] = {}
+        self.max_quota_wait_s = max_quota_wait_s
+        self.quota_waits = 0
         self.usage = Usage()
 
     def complete(
@@ -166,7 +169,9 @@ class OpenAICompatibleLLM:
         # and retry-after handling below absorbs it.
         estimate = sum(len(m["content"]) for m in messages) // 4 + min(max_tokens, 300)
         limiter = self.limiters.setdefault(model, RateLimiter(self.tpm, sleep=self.sleep))
-        for attempt in range(6):
+        attempt = 0
+        quota_waited = 0.0
+        while attempt < 6:
             limiter.acquire(estimate)
             started = time.perf_counter()
             try:
@@ -179,6 +184,16 @@ class OpenAICompatibleLLM:
                 continue
             except _Retry as exc:
                 self.usage.errors += 1
+                if exc.daily:
+                    # A rolling daily quota frees up within minutes. Pause rather than drop the turn,
+                    # so experiment arms stay comparable; give up only after max_quota_wait_s.
+                    if quota_waited + exc.after > self.max_quota_wait_s:
+                        raise LLMError(f"{model}: daily quota still exhausted after waiting") from exc
+                    self.quota_waits += 1
+                    quota_waited += exc.after + 1
+                    self.sleep(exc.after + 1)
+                    continue
+                attempt += 1
                 self.sleep(min(exc.after, 65) + attempt)
                 continue
             message = data["choices"][0]["message"]
@@ -226,9 +241,8 @@ class OpenAICompatibleLLM:
                     if after
                     else (int(match.group(1) or 0) * 60 + float(match.group(2)) if match else 10.0)
                 )
-                if "per day" in detail or "TPD" in detail or "RPD" in detail:
-                    raise LLMError(f"daily limit reached: {detail}") from exc
-                raise _Retry(wait) from exc
+                daily = "per day" in detail or "TPD" in detail or "RPD" in detail
+                raise _Retry(wait, daily=daily) from exc
             if exc.code == 400 and "json_validate_failed" in detail:
                 raise _BadJSON() from exc
             raise LLMError(f"HTTP {exc.code}: {detail}") from exc
@@ -241,9 +255,10 @@ class _BadJSON(Exception):
 
 
 class _Retry(Exception):
-    def __init__(self, after: float) -> None:
+    def __init__(self, after: float, daily: bool = False) -> None:
         super().__init__(after)
         self.after = after
+        self.daily = daily
 
 
 class FakeLLM:
