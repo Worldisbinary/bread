@@ -39,3 +39,6 @@ select = ["E", "F", "I", "B", "UP", "SIM"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.ruff.lint.per-file-ignores]
+"rlife/web.py" = ["E501"]  # server-rendered HTML templates
