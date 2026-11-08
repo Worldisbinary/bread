@@ -62,6 +62,39 @@ python -m rlife judge-eval evals/labels.csv
 With Docker: `docker compose up -d web prometheus grafana` (UI on 8000, Grafana on 3000), and
 `docker compose --profile sim run --rm sim experiment ranking` for a run.
 
+## Ages of Kingdoms: the game
+
+A browser strategy game built on the same engine. Pick a real river valley (Indus, Nile,
+Mesopotamia, Ganges, Yellow River, Mediterranean), a start year and 5 to 10 kingdoms, then rule
+one dynasty. Every kingdom is a simulated society of farmers, labourers, artisans, merchants,
+clerks, soldiers, civil servants and teachers living under liberal, authoritarian or socialist
+laws. Citizens earn karma from how their town square votes on what they say; kings, generals,
+sages and priests have abilities, knowledge and ideologies. Kingdoms trade blows over food,
+energy and armour, and droughts and floods move the harvest.
+
+Three kinds of agents run alongside the player, each with rules that always work, an optional
+LLM layer, guardrails, and metrics:
+
+| Agent | Job | Measured by |
+|---|---|---|
+| Navigator (Vira) | Spoken tutorial that advances on what the player does; answers questions | tutorial funnel, answer latency (hard 6 s deadline, then a canned answer) |
+| Town Wardens | Moderate every town-square post: hate, threats, spam, prompt injection | precision and recall against labelled posts, including held-out paraphrases and harmless look-alikes |
+| LiveOps Director | Festivals, relief, trade fairs, quests and difficulty, proposed by the LLM in the background | guardrail rejections, LLM share, happiness change a few years after each action |
+
+The admin console (`/game/admin`, token required) shows all of it, plus endpoint latency.
+
+```bash
+python -m rlife serve --port 8010        # http://localhost:8010/game ; admin token printed here
+```
+
+**Deploy.** `Dockerfile.game` is a slim image of the game alone; `render.yaml` deploys it on
+Render's free plan (New > Blueprint > this repo; paste your LLM key when asked). Each visitor
+gets their own world through a session cookie, LLM calls are capped per day
+(`RLIFE_LLM_DAILY_CAP`) after which agents use their rules, and the server honours `PORT`, so
+the same image runs on Railway, Fly.io or Hugging Face Spaces. Free hosts sleep when idle and
+have no persistent disk: the first visit after a pause takes about a minute, and saved worlds
+reset when the service restarts.
+
 ## Results
 
 The first live experiment (24 agents, 12 ticks, three feed rankings, Groq `gpt-oss-20b` agents

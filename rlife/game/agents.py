@@ -20,6 +20,8 @@ LiveOps Director observes world and player metrics every few years and pulls one
 import json
 import re
 import time
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FutureTimeout
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -107,6 +109,9 @@ class _NoLLMPickle:
         return state
 
 
+_ASK_POOL = ThreadPoolExecutor(max_workers=4, thread_name_prefix="navigator")
+
+
 class Navigator(_NoLLMPickle):
     def __init__(self, llm=None, model: str = "openai/gpt-oss-20b", budget_s: float = 6.0) -> None:
         self.llm, self.model, self.budget_s = llm, model, budget_s
@@ -148,15 +153,19 @@ class Navigator(_NoLLMPickle):
             answer = "I only speak of the realm and its rule. Ask me about your kingdom!"
             source = "guardrail"
         elif self.llm is not None:
-            try:
-                reply = self.llm.complete(
-                    [{"role": "system", "content": NAVIGATOR_SYSTEM}, {"role": "user", "content": question}],
-                    model=self.model,
-                    max_tokens=300,
-                    temperature=0.4,
-                )
-                if time.perf_counter() - started <= self.budget_s and reply.text:
+            future = _ASK_POOL.submit(
+                self.llm.complete,
+                [{"role": "system", "content": NAVIGATOR_SYSTEM}, {"role": "user", "content": question}],
+                model=self.model,
+                max_tokens=300,
+                temperature=0.4,
+            )
+            try:  # a hard deadline: past it the player gets the canned answer, the call finishes unseen
+                reply = future.result(timeout=self.budget_s)
+                if reply.text:
                     answer, source = reply.text.strip()[:400], "llm"
+            except FutureTimeout:
+                source = "canned (llm too slow)"
             except LLMError:
                 pass
         if answer is None:

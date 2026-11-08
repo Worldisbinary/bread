@@ -17,7 +17,7 @@ from html import escape
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import HTMLResponse, JSONResponse, Response
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
 from . import metrics
@@ -96,6 +96,8 @@ def create_app(run_paths: list[str]) -> FastAPI:
 
     @app.get("/", response_class=HTMLResponse)
     def index():
+        if not runs:  # a game-only deployment: the front door is the game
+            return RedirectResponse("/game")
         rows = []
         for name in runs:
             w = world(name)

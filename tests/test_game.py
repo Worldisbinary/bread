@@ -58,8 +58,8 @@ def test_attacks_need_supplies_and_reach():
 
 
 def test_api_keeps_metrics_admin_only(tmp_path, monkeypatch):
-    monkeypatch.setattr(api, "SAVE", tmp_path / "g.pkl")
-    api._game["world"] = None
+    monkeypatch.setattr(api, "SAVE_DIR", tmp_path)
+    api.SESSIONS.clear()
     from rlife.web import create_app
 
     client = TestClient(create_app([]))

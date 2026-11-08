@@ -46,7 +46,7 @@ button{background:#c47f00;border:none;font-weight:800;cursor:pointer}
       <div class="grid">
         <div class="card"><h2>Town Wardens (moderation)</h2><div id="mod" class="kpis"></div><div id="modReasons" class="bars"></div>
           <p class="note">Precision and recall are measured against labelled posts, including held-out paraphrases the rules
-            never saw and harmless posts that look risky.</p></div>
+            never saw and harmless posts that look risky.</p><p class="note" id="fleetMod"></p></div>
         <div class="card"><h2>LiveOps Director</h2><div id="dir" class="kpis"></div>
           <p class="note">Every action passes guardrails: allow-list, cooldowns, a valid target and no extra pressure
             on a player already under attack. Impact is the change in happiness measured a few years later.</p></div>
@@ -145,13 +145,18 @@ function renderAgents(s) {
     kpi("Precision", m.precision, m.precision >= 0.8 ? "ok" : "bad") + kpi("Recall", m.recall, m.recall >= 0.8 ? "ok" : "bad") +
     kpi("Missed", m.missed);
   $("modReasons").innerHTML = bars(m.by_reason || {}, m.removed);
+  const f = s.fleet || {}, fm = f.moderation || {};
+  $("fleetMod").textContent = f.worlds_live ? `Across all ${f.worlds_live} live worlds: ${fm.reviewed} posts reviewed, ` +
+    `precision ${fm.precision ?? "n/a"}, recall ${fm.recall ?? "n/a"}; the Director took ${f.director_actions} actions ` +
+    `(${f.director_blocked} blocked, ${Math.round((f.director_llm_share || 0) * 100)}% decided by the LLM).` : "";
   const dh = d.mean_happiness_change;
   $("dir").innerHTML = kpi("Decisions", d.decisions) + kpi("Actions taken", d.actions) + kpi("Blocked by guardrails", d.rejected_by_guardrails) +
     kpi("LLM share", d.llm_share !== undefined ? Math.round(d.llm_share * 100) + "%" : null) + kpi("Difficulty", d.difficulty) +
     kpi("Happiness impact", dh === null || dh === undefined ? "pending" : (dh > 0 ? "+" : "") + dh, dh > 0 ? "ok" : dh < 0 ? "bad" : "");
   const acts = Object.values(t.actions || {}).reduce((x, y) => x + y, 0);
   $("tele").innerHTML = kpi("Sessions", t.sessions) + kpi("Player actions", acts) + kpi("Tutorial step", t.tutorial_step) +
-    kpi("LLM attached", t.llm_attached ? "yes" : "no (rules)") + kpi("Questions", (t.questions || []).length) + kpi("Year", s.label);
+    kpi("LLM attached", t.llm_attached ? "yes" : "no (rules)") + kpi("Live worlds", (s.fleet || {}).worlds_live) +
+    kpi("LLM calls today", t.llm_budget ? `${t.llm_budget.calls} / ${t.llm_budget.cap}` : null);
   $("latency").innerHTML = "<tr><th>Endpoint</th><th>Calls</th><th>p50</th><th>p95</th></tr>" +
     Object.entries(t.latency_ms || {}).map(([k, v]) => `<tr><td>${k}</td><td>${v.n}</td><td>${v.p50} ms</td><td>${v.p95} ms</td></tr>`).join("");
   const funnel = t.funnel || {};

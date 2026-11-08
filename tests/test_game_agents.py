@@ -60,9 +60,10 @@ def test_world_reports_agent_metrics_over_time():
 
 
 def test_api_navigator_flow_and_admin_telemetry(tmp_path, monkeypatch):
-    monkeypatch.setattr(api, "SAVE", tmp_path / "g.pkl")
+    monkeypatch.setattr(api, "SAVE_DIR", tmp_path)
     monkeypatch.delenv("LLM_API_KEY", raising=False)
-    api._game.update(world=None, navigator=None, llm=None)
+    api.SESSIONS.clear()
+    api._shared["llm"] = None
     from rlife.web import create_app
 
     client = TestClient(create_app([]))
@@ -85,3 +86,57 @@ def test_api_navigator_flow_and_admin_telemetry(tmp_path, monkeypatch):
     tele = admin["telemetry"]
     assert tele["latency_ms"]["step"]["n"] >= 1 and tele["actions"]["train"] >= 1
     assert tele["llm_attached"] is False and tele["questions"]
+
+
+def test_each_visitor_plays_their_own_world(tmp_path, monkeypatch):
+    monkeypatch.setattr(api, "SAVE_DIR", tmp_path)
+    api.SESSIONS.clear()
+    from rlife.web import create_app
+
+    app = create_app([])
+    alice, bob = TestClient(app), TestClient(app)
+    assert alice.get("/game/api/state").status_code == 404  # no cookie, no world
+    alice.post("/game/api/new", json={"preset": "nile", "population": 600, "kingdoms": 3})
+    bob.post("/game/api/new", json={"preset": "indus", "population": 600, "kingdoms": 5})
+    alice.post("/game/api/step", json={"years": 3})
+    assert alice.get("/game/api/state").json()["preset"] == "nile"
+    assert bob.get("/game/api/state").json()["preset"] == "indus"
+    assert bob.get("/game/api/state").json()["year"] != alice.get("/game/api/state").json()["year"]
+    # evicted worlds come back from disk when their player returns
+    api.SESSIONS.clear()
+    assert alice.get("/game/api/state").json()["preset"] == "nile"
+    assert alice.post("/game/api/action", json={"action": "attack", "target": 99}).status_code == 400
+    assert TestClient(app).get("/").url.path == "/game"
+
+
+def test_llm_budget_and_navigator_deadline():
+    import time
+
+    from rlife.llm import LLMError
+
+    class Slow:
+        def complete(self, *args, **kwargs):
+            time.sleep(1.0)
+            raise AssertionError("never read")
+
+    nav = Navigator(llm=Slow(), budget_s=0.2)
+    started = time.perf_counter()
+    answer = nav.ask("how do I train troops")
+    assert time.perf_counter() - started < 0.8 and answer["source"].startswith("canned")
+
+    calls = []
+
+    class Fast:
+        def complete(self, *args, **kwargs):
+            calls.append(1)
+            return type("R", (), {"text": "ok"})()
+
+    budgeted = api.BudgetedLLM(Fast(), cap=2)
+    budgeted.complete([])
+    budgeted.complete([])
+    try:
+        budgeted.complete([])
+        raise AssertionError("the budget should refuse a third call")
+    except LLMError:
+        pass
+    assert len(calls) == 2
