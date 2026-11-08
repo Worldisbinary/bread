@@ -285,6 +285,7 @@ class Economy:
             "stolen": stolen,
             "subsidy_bill": subsidy_bill,
             "tax": float(tax.sum()),
+            "grain": float(grain),
             "wage_bill": wage_bill * pay_ratio,
             "pay_ratio": pay_ratio,
         }

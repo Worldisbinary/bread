@@ -152,8 +152,13 @@ def main(argv=None) -> None:
     elif args.cmd == "serve":
         import uvicorn
 
+        from .game.api import admin_token_hint
         from .web import create_app
 
+        print(
+            f"Game: http://localhost:{args.port}/game   Admin: http://localhost:{args.port}/game/admin "
+            f"(token: {admin_token_hint()})"
+        )
         uvicorn.run(create_app(args.runs), host="0.0.0.0", port=args.port)
     elif args.cmd == "label":
         from .evals import export_for_labelling

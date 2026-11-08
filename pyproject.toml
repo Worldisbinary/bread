@@ -28,7 +28,7 @@ build-backend = "setuptools.build_meta"
 include = ["rlife*"]
 
 [tool.setuptools.package-data]
-rlife = ["data/*.json", "web/*.html"]
+rlife = ["data/*.json", "web/*.html", "game/static/*"]
 
 [tool.ruff]
 line-length = 110

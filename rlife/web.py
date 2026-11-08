@@ -22,6 +22,7 @@ from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
 from . import metrics
 from .feed import rank
+from .game.api import router as game_router
 from .ideology import classify
 from .kingdom.web import router as kingdom_router
 from .world import World
@@ -82,6 +83,7 @@ def create_app(run_paths: list[str]) -> FastAPI:
     }
     app = FastAPI(title="r/life")
     app.include_router(kingdom_router)
+    app.include_router(game_router)
 
     def world(run: str) -> World:
         if run not in runs:

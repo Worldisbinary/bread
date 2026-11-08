@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>r/life Admin Console</title>
+<link href="https://fonts.googleapis.com/css2?family=Lilita+One&family=Nunito:wght@600;800&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#10151c;--card:#18212c;--ink:#e7edf3;--muted:#8fa0b3;--line:#263343;--gold:#ffcc33}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font-family:Nunito,system-ui,sans-serif}
+header{display:flex;align-items:center;gap:14px;padding:14px 20px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+h1{font-family:'Lilita One';font-weight:400;margin:0;color:var(--gold);font-size:26px}
+main{padding:16px 20px;max-width:1400px;margin:0 auto}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px}
+.card h2{margin:0 0 6px;font-family:'Lilita One';font-weight:400;font-size:22px}
+.kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin:8px 0}
+.kpi{background:#0f1720;border-radius:10px;padding:6px 8px}.kpi b{display:block;font-size:18px}.kpi small{color:var(--muted)}
+canvas{width:100%;height:56px;display:block;margin-top:4px}
+.chart-label{display:flex;justify-content:space-between;color:var(--muted);font-size:12px;margin-top:8px}
+.log{font-size:13px;max-height:360px;overflow:auto}.log div{padding:3px 0;border-bottom:1px solid var(--line)}
+.war{color:#ff9b7a}.climate{color:#9fd4ff}.vassal{color:var(--gold)}.succession{color:#c7a6ff}
+input,button{font:inherit;padding:8px 12px;border-radius:10px;border:1px solid var(--line);background:#0f1720;color:var(--ink)}
+button{background:#c47f00;border:none;font-weight:800;cursor:pointer}
+.muted{color:var(--muted)}table{width:100%;border-collapse:collapse;font-size:13px}td,th{padding:5px;border-bottom:1px solid var(--line);text-align:left}
+</style>
+</head>
+<body>
+<header><h1>r/life Admin Console</h1><span class="muted" id="where"></span>
+  <span style="flex:1"></span><a href="/game" style="color:var(--gold)">Back to the game</a></header>
+<main>
+  <div id="login" class="card" style="max-width:420px">
+    <h2>Admin sign-in</h2>
+    <p class="muted">Metrics and LiveOps are for operators only. The token is printed when the server starts
+      (or set RLIFE_ADMIN_TOKEN).</p>
+    <input id="token" placeholder="Admin token" style="width:100%"><p><button id="go">Sign in</button> <span id="err" class="muted"></span></p>
+  </div>
+  <div id="dash" hidden>
+    <div class="card" style="margin-bottom:14px"><h2>World</h2><div id="world" class="kpis"></div>
+      <table id="compare"></table></div>
+    <div id="kingdoms" class="grid"></div>
+    <div class="grid" style="margin-top:14px">
+      <div class="card"><h2>Chronicle</h2><div id="chronicle" class="log"></div></div>
+      <div class="card"><h2>LiveOps actions</h2><div id="liveops" class="log"></div></div>
+    </div>
+  </div>
+</main>
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+const fmt = n => Math.round(n).toLocaleString();
+async function load() {
+  const r = await fetch("/game/api/admin/state");
+  if (r.status === 403) return false;
+  if (!r.ok) { $("err").textContent = "No world yet: start one in the game."; return true; }
+  render(await r.json()); return true;
+}
+$("go").onclick = async () => {
+  const r = await fetch("/game/api/admin/login", {method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({token: $("token").value.trim()})});
+  if (!r.ok) { $("err").textContent = "Wrong token."; return; }
+  await load();
+};
+function spark(canvas, values, color) {
+  const dpr = devicePixelRatio || 1, w = canvas.clientWidth, h = canvas.clientHeight;
+  canvas.width = w * dpr; canvas.height = h * dpr; const c = canvas.getContext("2d"); c.scale(dpr, dpr);
+  if (values.length < 2) return;
+  const lo = Math.min(...values), hi = Math.max(...values), span = hi - lo || 1;
+  c.strokeStyle = color; c.lineWidth = 2; c.beginPath();
+  values.forEach((v, i) => { const x = i / (values.length - 1) * (w - 4) + 2, y = h - 4 - (v - lo) / span * (h - 8);
+    i ? c.lineTo(x, y) : c.moveTo(x, y); });
+  c.stroke();
+}
+const SERIES = [["population", "Population"], ["happiness", "Happiness"], ["unrest", "Unrest"],
+  ["wealth_gini", "Wealth Gini"], ["treasury", "Treasury"], ["troops", "Troops"], ["hunger_rate", "Hunger rate"]];
+function render(s) {
+  $("login").hidden = true; $("dash").hidden = false;
+  $("where").textContent = `${s.region} · ${s.label}`;
+  const alive = s.kingdoms.filter(k => k.alive);
+  const pop = alive.reduce((a, k) => a + k.population, 0);
+  const wars = s.chronicle.filter(e => e.kind === "war").length;
+  $("world").innerHTML = [["Kingdoms alive", alive.length], ["Population", fmt(pop)], ["Wars recorded", wars],
+    ["Vassals", s.kingdoms.filter(k => k.vassal_of !== null).length],
+    ["Avg happiness", (alive.reduce((a, k) => a + k.happiness, 0) / Math.max(alive.length, 1)).toFixed(3)],
+    ["Seasons played", (s.kingdoms[0].history || []).length]].map(([l, v]) => `<div class="kpi"><small>${l}</small><b>${v}</b></div>`).join("");
+  const last = k => (k.history || [])[k.history.length - 1] || {};
+  $("compare").innerHTML = `<tr><th>Dynasty</th><th>Laws</th><th>Pop</th><th>Retention</th><th>Happy</th><th>Unrest</th><th>Gini</th><th>Troops</th><th>Karma</th></tr>` +
+    s.kingdoms.map(k => `<tr><td style="color:${k.color}">${k.name}${k.id === s.player ? " ★" : ""}</td><td>${k.laws}</td><td>${k.population}</td>
+      <td>${(last(k).retention ?? 1).toFixed(2)}</td><td>${k.happiness.toFixed(2)}</td><td>${(last(k).unrest ?? 0).toFixed(2)}</td>
+      <td>${(last(k).wealth_gini ?? 0).toFixed(2)}</td><td>${k.troops}</td><td>${k.karma}</td></tr>`).join("");
+  $("kingdoms").innerHTML = s.kingdoms.map(k => `<div class="card"><h2 style="color:${k.color}">${k.name}${k.id === s.player ? " ★" : ""}</h2>
+    <div class="muted">${k.laws} laws · ${k.free_speech ? "free speech" : "censored"} · walls ${k.walls}${k.alive ? "" : " · fallen"}</div>
+    ${SERIES.map(([key, label]) => `<div class="chart-label"><span>${label}</span><span>${fmtLast(k, key)}</span></div><canvas data-k="${k.id}" data-s="${key}"></canvas>`).join("")}</div>`).join("");
+  document.querySelectorAll("canvas[data-k]").forEach(cv => {
+    const k = s.kingdoms[+cv.dataset.k]; spark(cv, (k.history || []).map(h => h[cv.dataset.s]), k.color);
+  });
+  $("chronicle").innerHTML = s.chronicle.slice().reverse().map(e => `<div class="${e.kind}"><b>${e.label}</b> ${e.text}</div>`).join("");
+  const ops = s.kingdoms.flatMap(k => (k.liveops_log || []).map(e => ({...e, kingdom: k.name})));
+  $("liveops").innerHTML = ops.length ? ops.reverse().map(e => `<div><b>${e.kingdom}</b> · ${e.actor}: ${e.action}
+    ${e.accepted ? "✅" : "⛔ " + e.reason}</div>`).join("") : "<p class='muted'>No LiveOps actions yet.</p>";
+}
+function fmtLast(k, key) {
+  const h = k.history || []; if (!h.length) return "";
+  const v = h[h.length - 1][key]; return typeof v === "number" ? (Math.abs(v) < 2 ? v.toFixed(3) : fmt(v)) : v;
+}
+load().then(ok => { if (ok) setInterval(load, 5000); });
+</script>
+</body>
+</html>
