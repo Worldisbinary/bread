@@ -29,6 +29,7 @@ from ..kingdom.economy import Economy, P
 from ..kingdom.events import LiveOps
 from ..kingdom.laws import LAW_SETS
 from ..kingdom.metrics import snapshot
+from . import town as T
 from .agents import BAD_POSTS, HARD_NEGATIVES, HELD_OUT_BAD, Director, Warden, moderation_metrics
 from .presets import PRESETS, year_label
 from .worldgen import BIOMES, B, H, W, generate
@@ -148,8 +149,12 @@ class GameWorld:
         kingdoms: int = 5,
         player: int = 0,
         llm=None,
+        age: str = "founding",
+        difficulty: str = "balanced",
     ) -> None:
         self.preset, self.seed, self.year = preset, seed, start_year
+        self.age, self.difficulty = age, difficulty
+        self.towns: dict[int, T.Town] = {}
         self.start_year = start_year
         self.rng = random.Random(seed)
         self.nrng = np.random.default_rng(seed)  # one generator for every numpy draw
@@ -161,6 +166,7 @@ class GameWorld:
         self._claim_territory()
         self.wardens = [Warden(k.id) for k in self.kingdoms]
         self.director = Director(llm=llm)
+        self.director.difficulty = T.DIFFICULTY.get(difficulty, 1.0)
         self.removed: list[dict] = []
         self.say(
             f"The world begins in {year_label(start_year)}: {len(self.kingdoms)} dynasties settle "
@@ -357,8 +363,9 @@ class GameWorld:
         )
         defenders = len(dfn.soldiers)
         militia = 0.05 * dfn.population * 0.3
+        town = self.towns.get(dfn.id)
         defence_power = (
-            (defenders + militia)
+            (defenders + militia + (3.0 * T.defense_power(town) if town else 0.0))
             * (1 + 0.25 * dfn.walls)
             * self.terrain_defence(dfn)
             * (1 + 0.4 * min(dfn.armour / max(defenders, 1), 1))
@@ -376,7 +383,8 @@ class GameWorld:
         dfn.attacked_by[att.id] = self.year
         loot = {"gold": 0.0, "food": 0.0}
         if won:
-            loot = {"gold": 0.25 * max(dfn.econ.treasury, 0), "food": 0.3 * dfn.food}
+            share = (0.08, 0.1) if town else (0.25, 0.3)  # a player's town keeps most of its stores
+            loot = {"gold": share[0] * max(dfn.econ.treasury, 0), "food": share[1] * dfn.food}
             dfn.econ.treasury -= loot["gold"]
             dfn.food -= loot["food"]
             att.econ.treasury += loot["gold"]
@@ -585,7 +593,11 @@ class GameWorld:
         for k in alive:
             self._climate(k)
             k.econ.step()
-            k.food = min(k.food + 0.15 * k.econ.last.get("grain", 0.0), 5.0 * k.population)
+            town = self.towns.get(k.id)
+            cap = max(5.0 * k.population, town.capacity("food")) if town else 5.0 * k.population
+            k.food = min(k.food + 0.15 * k.econ.last.get("grain", 0.0), max(cap, k.food))
+            if town:
+                k.karma += 0.5 * max((b.level for b in town.buildings if b.type == "temple"), default=0)
             k.energy = min(100.0, k.energy + (15 if k.food > 0.1 * k.population else 5))
             k.armour += 0.05 * (k.econ.present & (k.econ.profession == P["artisan"])).sum()
             if k.vassal_of is not None:  # vassals pay a fifth of their tax take as tribute
@@ -633,6 +645,129 @@ class GameWorld:
             self.director.quest = None
         self.year += 1
         return self.chronicle[before:]
+
+    # --- towns ------------------------------------------------------------------
+
+    def wallet(self, k: Kingdom) -> dict:
+        return {"gold": float(k.econ.treasury), "food": float(k.food)}
+
+    def settle(self, k: Kingdom, wallet: dict) -> None:
+        k.econ.treasury, k.food = float(wallet["gold"]), float(wallet["food"])
+
+    def found_town(self, kid: int) -> T.Town:
+        """The player's starting town, laid out for the chosen age."""
+        age = T.AGES[self.age]
+        town = T.architect(kid, age["palace"], self.seed * 31 + kid, starter=True)
+        town.army = dict(age["army"])
+        now = T.now()
+        for b in town.buildings:
+            b.last = now
+            if "produces" in T.BUILDINGS[b.type]:
+                b.stored = 0.6 * T.stats(b.type, b.level)["capacity"]  # a first harvest is waiting
+        k = self.kingdoms[kid]
+        k.econ.treasury = max(k.econ.treasury, age["gold"])
+        k.food = max(k.food, age["food"])
+        self.towns = {kid: town}
+        return town
+
+    def rival_palace(self, k: Kingdom) -> int:
+        rivals = [o for o in self.kingdoms if o.alive and o.id != self.player]
+        strength = {o.id: len(o.soldiers) * (1 + 0.25 * o.walls) + 0.02 * o.population for o in rivals}
+        order = sorted(rivals, key=lambda o: strength[o.id])
+        rank = order.index(k) / max(len(order) - 1, 1) if k in order else 0.5
+        level = T.AGES[self.age]["palace"] + (1 if rank > 0.66 else -1 if rank < 0.25 else 0)
+        level += (self.year - self.start_year) // 30
+        return int(min(max(level, 1), 5))
+
+    def rival_town(self, k: Kingdom) -> T.Town:
+        palace = self.rival_palace(k)
+        return T.architect(k.id, palace, self.seed * 1009 + k.id * 97 + palace * 13 + (self.year // 10))
+
+    def loot_offer(self, k: Kingdom, palace: int) -> dict:
+        return {
+            "gold": int(0.2 * max(k.econ.treasury, 0) + 250 * palace),
+            "food": int(0.25 * max(k.food, 0) + 250 * palace),
+        }
+
+    def rivals(self) -> list[dict]:
+        me = self.kingdoms[self.player]
+        out = []
+        for k in self.kingdoms:
+            if k.id == self.player or not k.alive:
+                continue
+            palace = self.rival_palace(k)
+            out.append(
+                {
+                    "id": k.id,
+                    "name": k.name,
+                    "color": k.color,
+                    "palace": palace,
+                    "laws": k.econ.laws.name,
+                    "troops": len(k.soldiers),
+                    "loot": self.loot_offer(k, palace),
+                    "in_reach": k in self.neighbours(me),
+                    "raided_you": self.year - k.attacked_by.get(me.id, -(10**6)) <= 5
+                    or self.year - me.attacked_by.get(k.id, -(10**6)) <= 5,
+                }
+            )
+        return out
+
+    def apply_battle(self, target: Kingdom, result: dict) -> dict:
+        """Consequences of a raid the player fought in the browser (already checked by town.check_report)."""
+        me = self.kingdoms[self.player]
+        town = self.towns[self.player]
+        for t, n in result["deployed"].items():
+            town.army[t] = max(0, town.army.get(t, 0) - n)
+        wallet = self.wallet(me)
+        gained = {}
+        for res in ("gold", "food"):
+            room = max(0, town.capacity(res) - wallet[res])
+            gained[res] = int(min(result["loot"][res], room))
+            wallet[res] += gained[res]
+        self.settle(me, wallet)
+        target.econ.treasury = max(0.0, target.econ.treasury - result["loot"]["gold"])
+        target.food = max(0.0, target.food - result["loot"]["food"])
+        provoked = self.year - me.attacked_by.get(target.id, -(10**6)) <= 5
+        target.attacked_by[me.id] = self.year
+        glory = T.glory_change(result["stars"])
+        town.glory = max(0, town.glory + glory)
+        if result["stars"]:
+            present = target.econ.present
+            target.econ.happiness[present] = np.clip(
+                target.econ.happiness[present] - 0.03 * result["stars"], 0, 1
+            )
+            me.karma += 1 if provoked else -2  # retaliation is understood; unprovoked raids are not
+        ruler = next(c for c in me.characters if c.role == "ruler")
+        ruler.karma += (1 if provoked else -2) if result["stars"] else 0
+        stars = "★" * result["stars"] or "no stars"
+        self.say(
+            f"{me.name} raided {target.name}: {result['destruction']:.0f}% destroyed, {stars}. "
+            f"Taken: {gained['gold']} gold, {gained['food']} grain.",
+            "war",
+            me.id,
+            attacker=me.id,
+            defender=target.id,
+            won=result["stars"] > 0,
+        )
+        town.battles.append(
+            {"year": self.year, "target": target.id, **result, "gained": gained, "glory": glory}
+        )
+        town.battles = town.battles[-50:]
+        quest = self.director.quest
+        bonus = 0
+        if quest and result["stars"]:
+            bonus = quest["reward"]
+            me.econ.treasury += bonus
+            self.say(f"Bounty quest complete: {bonus} gold awarded.", "liveops", me.id)
+            self.director.quest = None
+        return {
+            **result,
+            "gained": gained,
+            "glory": glory,
+            "glory_total": town.glory,
+            "bonus": bonus,
+            "provoked": provoked,
+        }
 
     # --- read-outs -----------------------------------------------------------
 

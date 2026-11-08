@@ -2,10 +2,10 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>r/life: Ages of Kingdoms</title>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Ages of Kingdoms</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700;900&family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700;900&family=Nunito:wght@600;800;900&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/game/static/style.css">
 <script type="importmap">
 {"imports": {"three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
@@ -16,86 +16,110 @@
 <div id="scene"></div>
 <div id="labels"></div>
 
-<!-- Start menu -->
+<!-- Start -->
 <section id="menu" class="overlay">
-  <div class="panel wide">
+  <div class="card wide">
     <div class="brand"><div class="crest-big">⚜</div><div><h1>Ages of Kingdoms</h1>
-      <p class="tag">An r/life world: rival dynasties, living people, agentic LiveOps.</p></div></div>
-    <div class="grid2">
-      <div>
-        <h3>Region</h3>
-        <div id="regions" class="regions"></div>
-      </div>
-      <div class="settings">
-        <h3>World settings</h3>
-        <label>Start year <output id="yearLabel"></output><input id="year" type="range"></label>
-        <label>Kingdoms <output id="kLabel">7</output><input id="kcount" type="range" min="5" max="10" value="7"></label>
-        <label>Population <output id="popLabel">3,500</output><input id="pop" type="range" min="1000" max="6000" step="100" value="3500"></label>
-        <label>Seed <input id="seed" type="number" value="7"></label>
-        <div class="buttons"><button id="found" class="cta">Found the world</button>
-          <button id="continue" class="ghost hidden">Continue saved world</button></div>
-        <p class="fine">Geography is stylised from the real region. Dynasty names are fictional.</p>
-      </div>
+      <p class="tag">Build your town. Raise an army. Raid your rivals. Every citizen remembers.</p></div></div>
+    <h3><span class="n">1</span> Choose a river valley</h3>
+    <div id="regions" class="regions"></div>
+    <h3><span class="n">2</span> Choose an age</h3>
+    <div id="ages" class="ages"></div>
+    <div class="row2">
+      <div><h3><span class="n">3</span> Rival kingdoms <output id="rivLabel">6</output></h3>
+        <input id="rivals" type="range" min="4" max="9" value="6">
+        <p class="hint">Towns you can raid, and who may raid you.</p></div>
+      <div><h3><span class="n">4</span> How warlike are they?</h3>
+        <div class="seg" id="difficulty"><button data-v="peaceful">Peaceful</button><button data-v="balanced" class="on">Balanced</button><button data-v="warlike">Warlike</button></div>
+        <p class="hint" id="diffHint">Rivals raid when they see weakness.</p></div>
     </div>
+    <div class="buttons"><button id="found" class="btn gold big">Found my kingdom</button>
+      <button id="continue" class="btn ghost hidden">Continue my kingdom</button></div>
   </div>
 </section>
 
-<!-- Dynasty chooser -->
 <section id="chooser" class="overlay hidden">
-  <div class="panel wide"><h2>Choose your dynasty</h2><div id="dynasties" class="dynasties"></div></div>
+  <div class="card wide"><h2>Choose your dynasty</h2>
+    <p class="hint">Each house has its own laws, king and temperament. Its people live by those laws.</p>
+    <div id="dynasties" class="dynasties"></div></div>
 </section>
 
-<!-- HUD -->
-<div id="hud" class="hidden">
-  <header id="topbar">
-    <div id="crest"><span id="crestDot"></span><div><b id="myName"></b><small id="myLaws"></small></div>
-      <span class="badge" title="Dynasty karma">☯ <b id="myKarma">0</b></span></div>
-    <div id="resources"></div>
-    <div id="clock"><b id="yearNow"></b>
-      <button class="icon" id="pause" title="Pause">❚❚</button>
-      <button class="icon" id="play" title="Play">▶</button>
-      <button class="icon" id="fast" title="Fast forward">▶▶</button>
-      <button class="icon" id="stepBtn" title="Advance one year">+1</button>
-      <button class="icon" id="sound" title="Sound and voice">🔊</button>
-    </div>
-  </header>
-
-  <aside id="realms"><h4>Realms</h4><div id="realmList"></div></aside>
-
-  <footer id="actions">
-    <button class="act" data-act="train"><i>⚔</i><span>Train troops</span><small>gold + grain</small></button>
-    <button class="act" data-act="forge"><i>🛡</i><span>Forge armour</span><small>1.5 gold each</small></button>
-    <button class="act" data-act="walls"><i>🏰</i><span>Raise walls</span><small id="wallCost"></small></button>
-    <button class="act" data-act="harvest_festival"><i>🎉</i><span>Festival</span><small>happiness</small></button>
-    <button class="act" data-act="grain_reserve_release"><i>🌾</i><span>Open granary</span><small>prices down</small></button>
-    <button class="act danger" id="attackBtn"><i>🔥</i><span>Attack</span><small>choose a realm</small></button>
-  </footer>
-
-  <div id="navigator">
-    <div class="avatar" id="navAvatar"></div>
-    <div class="navbody">
-      <div class="navhead"><b>Vira</b><small>Royal Navigator</small><span id="navStep"></span></div>
-      <p id="navText"></p>
-      <p id="navTip" class="tip hidden"></p>
-      <div class="navrow"><button id="navNext" class="mini">Next</button>
-        <form id="askForm"><input id="askInput" placeholder="Ask Vira about the game…" maxlength="200"><button class="mini">Ask</button></form>
-        <button id="navHide" class="mini ghost">Hide</button></div>
-    </div>
+<!-- Home -->
+<div id="home" class="hud hidden">
+  <div id="profile" class="panel">
+    <span id="crestDot"></span>
+    <div class="who"><b id="myName"></b><small id="myLaws"></small></div>
+    <div class="chips"><span class="chip" title="Palace level">🏛 <b id="myPalace">1</b></span>
+      <span class="chip" title="Glory from raids">🏆 <b id="myGlory">0</b></span>
+      <span class="chip" title="Dynasty karma">☯ <b id="myKarma">0</b></span>
+      <span class="chip year" title="The world moves on in real time"><b id="yearNow"></b><i id="yearRing"></i></span></div>
   </div>
-  <button id="navShow" class="hidden">Vira</button>
-
-  <div id="chronicle"></div>
-  <div id="toast"></div>
+  <div id="bars"></div>
+  <button id="attackBtn" class="round attack"><i>⚔️</i><span>Attack!</span></button>
+  <div id="rightBtns">
+    <button id="newsBtn" class="round small"><i>📜</i><span>News</span><em id="newsBadge" class="hidden"></em></button>
+    <button id="armyBtn" class="round"><i>🛡️</i><span>Army</span></button>
+    <button id="shopBtn" class="round"><i>🏗️</i><span>Shop</span></button>
+  </div>
+  <button id="soundBtn" class="icon" title="Sound and voice">🔊</button>
+  <div id="selPanel" class="panel hidden"></div>
+  <div id="placeBar" class="hidden"><span id="placeText"></span>
+    <button id="placeOk" class="btn green">✓ Place</button><button id="placeCancel" class="btn ghost">✕</button></div>
 </div>
 
-<aside id="inspector" class="hidden"><button class="close" id="closeInspector">✕</button><div id="inspectorBody"></div></aside>
+<div id="navigator" class="panel hidden">
+  <div class="avatar" id="navAvatar"></div>
+  <div class="navbody">
+    <div class="navhead"><b>Vira</b><small>Royal Navigator</small><span id="navStep"></span></div>
+    <p id="navText"></p>
+    <p id="navTip" class="tip hidden"></p>
+    <div class="navrow"><button id="navNext" class="mini">Next</button>
+      <form id="askForm"><input id="askInput" placeholder="Ask Vira…" maxlength="200"><button class="mini">Ask</button></form>
+      <button id="navHide" class="mini ghost">Hide</button></div>
+  </div>
+</div>
+<button id="navShow" class="hidden">💬 Vira</button>
 
-<section id="attackModal" class="overlay hidden">
-  <div class="panel"><h2 id="attackTitle">Attack</h2><div id="attackBody"></div>
-    <div class="buttons"><button class="cta danger" id="launch">Launch attack</button><button class="ghost" id="cancelAttack">Cancel</button></div></div>
-</section>
+<!-- Choose a raid -->
+<div id="mapHud" class="hud hidden">
+  <button id="homeBtn" class="btn ghost">🏠 Return home</button>
+  <aside id="rivalPanel" class="panel"><h2>Choose a town to raid</h2>
+    <p class="hint">Raids take loot and earn glory. Raiding someone who raided you is honourable; an unprovoked raid costs karma.</p>
+    <div id="rivalList"></div></aside>
+</div>
 
-<div id="loading" class="overlay hidden"><div class="spinner"></div><p id="loadingText">Shaping the land…</p></div>
+<!-- Battle -->
+<div id="battleHud" class="hud hidden">
+  <div id="bTopLeft" class="panel"><div id="bTarget"></div><div id="bAvail"></div></div>
+  <div id="bCenter"><div id="bTimer"></div><div id="bStars"></div><div id="bPct"></div></div>
+  <div id="bTopRight" class="panel"><small>Loot taken</small><div id="bLoot"></div></div>
+  <p id="bHint">Tap outside the red zone to send troops. Hold to send many.</p>
+  <div id="troopBar"></div>
+  <button id="endBattle" class="btn red">End battle</button>
+</div>
+
+<!-- Sheets -->
+<section id="shop" class="modal hidden"><div class="sheet">
+  <header><h2>Shop</h2><div class="tabs" id="shopTabs"></div><button class="x" data-close="shop">✕</button></header>
+  <div id="shopItems" class="cards"></div></div></section>
+
+<section id="army" class="modal hidden"><div class="sheet">
+  <header><h2>Army</h2><div id="armyCap"></div><button class="x" data-close="army">✕</button></header>
+  <div id="troopCards" class="cards"></div>
+  <div class="armyfoot"><div><h3>Training</h3><div id="queue"></div></div><div><h3>Ready to fight</h3><div id="armyList"></div></div></div>
+</div></section>
+
+<section id="news" class="modal hidden"><div class="sheet">
+  <header><h2>News</h2><div class="tabs" id="newsTabs"><button data-tab="chronicle" class="on">Kingdom news</button>
+    <button data-tab="square">Town square</button><button data-tab="realms">Realms</button></div><button class="x" data-close="news">✕</button></header>
+  <div id="newsBody"></div></div></section>
+
+<section id="result" class="modal hidden"><div class="sheet result">
+  <h2 id="rTitle"></h2><div id="rStars"></div><div id="rBody"></div>
+  <button id="rHome" class="btn gold big">Return home</button></div></section>
+
+<div id="toast"></div>
+<div id="loading" class="overlay hidden"><div class="spinner"></div><p id="loadingText">Loading…</p></div>
 
 <script type="module" src="/game/static/game.js"></script>
 </body>

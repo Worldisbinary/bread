@@ -51,6 +51,10 @@ button{background:#c47f00;border:none;font-weight:800;cursor:pointer}
           <p class="note">Every action passes guardrails: allow-list, cooldowns, a valid target and no extra pressure
             on a player already under attack. Impact is the change in happiness measured a few years later.</p></div>
         <div class="card"><h2>Player telemetry</h2><div id="tele" class="kpis"></div><table id="latency"></table></div>
+        <div class="card"><h2>Raids and town</h2><div id="raids" class="kpis"></div><div id="raidStars" class="bars"></div>
+          <div id="townActs" class="bars"></div>
+          <p class="note">Battles run in the player's browser; the server checks every report against what the deployed army
+            could have done, and counts the reports it had to correct.</p></div>
         <div class="card"><h2>Navigator funnel</h2><div id="funnel" class="bars"></div>
           <h2 style="margin-top:10px;font-size:17px">Questions asked</h2>
           <div id="questions" class="log" style="max-height:160px"></div></div>
@@ -154,6 +158,13 @@ function renderAgents(s) {
     kpi("LLM share", d.llm_share !== undefined ? Math.round(d.llm_share * 100) + "%" : null) + kpi("Difficulty", d.difficulty) +
     kpi("Happiness impact", dh === null || dh === undefined ? "pending" : (dh > 0 ? "+" : "") + dh, dh > 0 ? "ok" : dh < 0 ? "bad" : "");
   const acts = Object.values(t.actions || {}).reduce((x, y) => x + y, 0);
+  const bt = t.battles || {};
+  $("raids").innerHTML = kpi("Raids", bt.count) +
+    kpi("Mean destruction", bt.mean_destruction !== null && bt.mean_destruction !== undefined ? bt.mean_destruction + "%" : null) +
+    kpi("Reports corrected", bt.corrected, bt.corrected ? "bad" : "ok");
+  $("raidStars").innerHTML = bars(Object.fromEntries((bt.stars || [0, 0, 0, 0]).map((n, i) => [i + " stars", n])), Math.max(1, ...(bt.stars || [1])));
+  $("townActs").innerHTML = bars(t.town_actions || {}, Math.max(1, ...Object.values(t.town_actions || {}))) +
+    Object.entries(bt.reasons || {}).map(([r, n]) => `<div class="note bad">${esc(r)}: ${n}</div>`).join("");
   $("tele").innerHTML = kpi("Sessions", t.sessions) + kpi("Player actions", acts) + kpi("Tutorial step", t.tutorial_step) +
     kpi("LLM attached", t.llm_attached ? "yes" : "no (rules)") + kpi("Live worlds", (s.fleet || {}).worlds_live) +
     kpi("LLM calls today", t.llm_budget ? `${t.llm_budget.calls} / ${t.llm_budget.cap}` : null);

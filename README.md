@@ -64,13 +64,25 @@ With Docker: `docker compose up -d web prometheus grafana` (UI on 8000, Grafana 
 
 ## Ages of Kingdoms: the game
 
-A browser strategy game built on the same engine. Pick a real river valley (Indus, Nile,
-Mesopotamia, Ganges, Yellow River, Mediterranean), a start year and 5 to 10 kingdoms, then rule
-one dynasty. Every kingdom is a simulated society of farmers, labourers, artisans, merchants,
-clerks, soldiers, civil servants and teachers living under liberal, authoritarian or socialist
-laws. Citizens earn karma from how their town square votes on what they say; kings, generals,
-sages and priests have abilities, knowledge and ideologies. Kingdoms trade blows over food,
-energy and armour, and droughts and floods move the harvest.
+A browser town-building and raiding game on top of the same engine (original art and content, all
+modelled procedurally in three.js). Pick a river valley (Indus, Nile, Mesopotamia, Ganges, Yellow
+River, Mediterranean: each has its own architecture), an age (which sets your palace level and which
+troops and defenses exist), how many rival kingdoms there are and how warlike they are, then rule one
+dynasty.
+
+- **Your town.** A palace, farms and gold mines that produce in real time (tap to collect),
+  granaries and treasuries that cap what you can hold, barracks, army camps, archer towers, bolt
+  throwers, catapults, walls, houses and a temple. Two builders; the palace level gates everything.
+  Farmers, miners, priests, merchants, the king and your army walk the streets.
+- **Raids.** Pick a rival on the map, drop spearmen, archers, horse raiders, battering rams and war
+  elephants outside the red zone, and watch them path-find, break walls and fight towers that shoot
+  back. Loot is taken as buildings are hit; half the town, the palace and everything are the three
+  stars. The battle runs in the browser; the server checks every report against what the deployed
+  army could have done and corrects the impossible ones (counted in the admin console).
+- **The living world.** Gold and grain are the kingdom's real treasury and granary in the citizen
+  simulation, so raids move wealth between simulated societies. A year passes every 40 seconds:
+  rival AIs train, raid each other and you, harvests swing with the weather, and citizens post in
+  their town square and earn karma. Unprovoked raids cost your dynasty karma; retaliation does not.
 
 Three kinds of agents run alongside the player, each with rules that always work, an optional
 LLM layer, guardrails, and metrics:

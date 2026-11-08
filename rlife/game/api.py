@@ -41,14 +41,16 @@ from fastapi import APIRouter, Header, HTTPException, Request, Response
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 
 from ..llm import LLMError
+from . import town as T
 from .agents import Navigator, moderation_metrics
-from .presets import PRESETS, describe
+from .presets import PRESETS, describe, year_label
 from .world import GameWorld
 
 STATIC = Path(__file__).parent / "static"
 SAVE_DIR = Path(os.environ.get("RLIFE_GAME_DIR", "runs/worlds"))
 MAX_WORLDS = int(os.environ.get("RLIFE_MAX_WORLDS", "40"))
 LLM_DAILY_CAP = int(os.environ.get("RLIFE_LLM_DAILY_CAP", "800"))
+YEAR_SECONDS = float(os.environ.get("RLIFE_YEAR_SECONDS", "40"))  # one world year per this many real seconds
 ADMIN_TOKEN = os.environ.get("RLIFE_ADMIN_TOKEN") or secrets.token_urlsafe(12)
 COOKIE = "rlife_sid"
 SID = re.compile(r"^[A-Za-z0-9_-]{16,64}$")
@@ -64,6 +66,8 @@ TELEMETRY: dict = {
     "sessions": 0,
     "questions": 0,
     "llm": {"day": "", "calls": 0, "refused": 0},
+    "battles": {"count": 0, "stars": [0, 0, 0, 0], "destruction": [], "corrected": 0, "reasons": {}},
+    "town": {},
 }
 
 
@@ -238,13 +242,32 @@ async def new_world(request: Request, response: Response):
     if preset not in PRESETS:
         raise HTTPException(400, "unknown region")
     lo, hi = PRESETS[preset]["years"]
-    year = int(min(max(int(body.get("year", PRESETS[preset]["default_year"])), lo), hi))
-    population = int(min(max(int(body.get("population", 2000)), 300), 6000))
-    kingdoms = int(min(max(int(body.get("kingdoms", 6)), 3), 10))
+    age = body.get("age", "founding")
+    if age not in T.AGES:
+        raise HTTPException(400, "unknown age")
+    difficulty = body.get("difficulty", "balanced")
+    if difficulty not in T.DIFFICULTY:
+        raise HTTPException(400, "unknown difficulty")
+    # The age places the start inside the region's era and sets the population; explicit values still win.
+    default_year = round(lo + (hi - lo) * T.AGES[age]["where"])
+    year = int(min(max(int(body.get("year", default_year)), lo), hi))
+    population = int(min(max(int(body.get("population", T.AGES[age]["population"])), 300), 6000))
+    kingdoms = int(body["rivals"]) + 1 if "rivals" in body else int(body.get("kingdoms", 7))
+    kingdoms = int(min(max(kingdoms, 3), 10))
     seed = int(body.get("seed", 7)) % 100000
     started = time.perf_counter()
     sid = _sid(request) or secrets.token_urlsafe(18)
-    world = GameWorld(preset, population, year, seed=seed, kingdoms=kingdoms, player=0, llm=_llm())
+    world = GameWorld(
+        preset,
+        population,
+        year,
+        seed=seed,
+        kingdoms=kingdoms,
+        player=0,
+        llm=_llm(),
+        age=age,
+        difficulty=difficulty,
+    )
     with _lock:
         session = _remember(sid, world, Navigator(llm=_llm()))
         TELEMETRY["sessions"] += 1
@@ -291,6 +314,8 @@ async def choose_player(request: Request):
         if not 0 <= kid < len(world.kingdoms):
             raise HTTPException(400, "unknown kingdom")
         world.player = kid
+        world.found_town(kid)
+        world.clock = time.time()
         _save(request, session)
     return {"ok": True, "player": kid}
 
@@ -455,5 +480,197 @@ def admin_state(request: Request, x_admin_token: str | None = Header(default=Non
             "questions": nav.questions[-20:],
             "llm_attached": _llm() is not None,
             "llm_budget": {**TELEMETRY["llm"], "cap": LLM_DAILY_CAP},
+            "town_actions": TELEMETRY["town"],
+            "battles": {
+                **{k: v for k, v in TELEMETRY["battles"].items() if k != "destruction"},
+                "mean_destruction": round(
+                    sum(TELEMETRY["battles"]["destruction"]) / len(TELEMETRY["battles"]["destruction"]), 1
+                )
+                if TELEMETRY["battles"]["destruction"]
+                else None,
+            },
         },
     }
+
+
+# ----------------------------------------------------------------------------- town and raids
+
+
+def _player_town(world: GameWorld) -> T.Town:
+    if world.player not in getattr(world, "towns", {}):
+        world.found_town(world.player)
+        world.clock = time.time()
+    return world.towns[world.player]
+
+
+def _tick_world(world: GameWorld, now: float) -> list[dict]:
+    """The world moves on in real time: one year every YEAR_SECONDS (at most 3 at once)."""
+    clock = getattr(world, "clock", None) or now
+    due = int((now - clock) // YEAR_SECONDS)
+    events: list[dict] = []
+    if due > 0:
+        for _ in range(min(due, 3)):
+            events += world.step()
+        clock += due * YEAR_SECONDS
+    world.clock = clock
+    me = world.player
+    return [
+        {"label": e["label"], "kind": e["kind"], "text": e["text"]}
+        for e in events
+        if e.get("kingdom") == me
+        or e.get("defender") == me
+        or e.get("attacker") == me
+        or e["kind"] == "liveops"
+    ]
+
+
+def _town_view(session: dict, now: float, news: list | None = None) -> dict:
+    world = session["world"]
+    town = _player_town(world)
+    me = world.kingdoms[world.player]
+    summary = world.kingdom_summary(me)
+    return {
+        **town.to_client(world.wallet(me), now),
+        "year": world.year,
+        "label": year_label(world.year),
+        "kingdom": {
+            key: summary[key]
+            for key in ("name", "color", "laws", "karma", "happiness", "population", "people")
+        },
+        "quest": world.director.quest,
+        "news": news or [],
+        "navigator": _nav_view(session),
+        "next_year_in": round(max(0.0, getattr(world, "clock", now) + YEAR_SECONDS - now), 1),
+    }
+
+
+@router.get("/game/api/catalog")
+def catalog():
+    return T.catalog()
+
+
+@router.get("/game/api/town")
+def town_state(request: Request):
+    started = time.perf_counter()
+    session = _session(request)
+    now = time.time()
+    with _lock:
+        world = session["world"]
+        town = _player_town(world)
+        news = [{"label": "", "kind": "build", "text": t} for t in town.advance(now)]
+        news += _tick_world(world, now)
+        if news:
+            _save(request, session)
+        view = _town_view(session, now, news)
+    _track("town", started)
+    return view
+
+
+@router.post("/game/api/town/{op}")
+async def town_action(op: str, request: Request):
+    body = await request.json()
+    started = time.perf_counter()
+    session = _session(request)
+    now = time.time()
+    result: dict = {}
+    with _lock:
+        world = session["world"]
+        town = _player_town(world)
+        me = world.kingdoms[world.player]
+        town.advance(now)
+        wallet = world.wallet(me)
+        try:
+            if op == "build":
+                b = town.build(
+                    str(body.get("type")), int(body.get("x", -1)), int(body.get("y", -1)), wallet, now
+                )
+                result = {"id": b.id}
+            elif op == "upgrade":
+                b = town.upgrade(int(body.get("id", -1)), wallet, now)
+                result = {"id": b.id}
+            elif op == "move":
+                town.move(int(body.get("id", -1)), int(body.get("x", -1)), int(body.get("y", -1)))
+            elif op == "collect":
+                result = {"amount": town.collect(int(body.get("id", -1)), wallet, now)}
+            elif op == "train":
+                result = {"trained": town.train(str(body.get("type")), int(body.get("n", 1)), wallet, now)}
+            else:
+                raise HTTPException(404, "unknown town action")
+        except T.TownError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        world.settle(me, wallet)
+        _save(request, session)
+    TELEMETRY["town"][op] = TELEMETRY["town"].get(op, 0) + 1
+    _track("town_" + op, started)
+    _nav_event(
+        session, {"build": "build", "upgrade": "build", "collect": "collect", "train": "train"}.get(op)
+    )
+    return {"result": result, "town": _town_view(session, now)}
+
+
+@router.get("/game/api/rivals")
+def rivals(request: Request):
+    world = _session(request)["world"]
+    _player_town(world)
+    return world.rivals()
+
+
+@router.post("/game/api/battle/start")
+async def battle_start(request: Request):
+    body = await request.json()
+    session = _session(request)
+    with _lock:
+        world = session["world"]
+        town = _player_town(world)
+        town.advance(time.time())
+        tid = int(body.get("target", -1))
+        if not 0 <= tid < len(world.kingdoms) or tid == world.player or not world.kingdoms[tid].alive:
+            raise HTTPException(400, "unknown target")
+        if not any(town.army.values()):
+            raise HTTPException(400, "You have no troops. Train some in the Army panel first.")
+        k = world.kingdoms[tid]
+        rival = world.rival_town(k)
+        layout = T.battle_layout(rival, world.loot_offer(k, rival.palace_level()))
+        battle = {
+            "id": secrets.token_urlsafe(8),
+            "target": tid,
+            "layout": layout,
+            "army": dict(town.army),
+            "started": time.time(),
+        }
+        session["battle"] = battle
+    return {
+        "battle_id": battle["id"],
+        "target": {"id": tid, "name": k.name, "color": k.color, "laws": k.econ.laws.name},
+        "army": battle["army"],
+        "preset": world.preset,
+        **layout,
+    }
+
+
+@router.post("/game/api/battle/end")
+async def battle_end(request: Request):
+    body = await request.json()
+    session = _session(request)
+    with _lock:
+        battle = session.get("battle")
+        if not battle or body.get("battle_id") != battle["id"]:
+            raise HTTPException(400, "That battle is not running.")
+        session["battle"] = None
+        if time.time() - battle["started"] > 15 * 60:
+            raise HTTPException(400, "That battle report is too old.")
+        world = session["world"]
+        result = T.check_report(battle["layout"], battle["army"], body)
+        outcome = world.apply_battle(world.kingdoms[battle["target"]], result)
+        _save(request, session)
+    stats = TELEMETRY["battles"]
+    stats["count"] += 1
+    stats["stars"][result["stars"]] += 1
+    stats["destruction"].append(result["destruction"])
+    del stats["destruction"][:-500]
+    if result["corrected"]:
+        stats["corrected"] += 1
+        for reason in result["corrected"]:
+            stats["reasons"][reason] = stats["reasons"].get(reason, 0) + 1
+    _nav_event(session, "attack")
+    return {"outcome": outcome, "town": _town_view(session, time.time())}
