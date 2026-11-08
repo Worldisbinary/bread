@@ -82,7 +82,7 @@ def main(argv=None) -> None:
     r.add_argument("directory")
 
     v = sub.add_parser("serve", help="browse a run in the web UI")
-    v.add_argument("runs", nargs="+", help="run .db files")
+    v.add_argument("runs", nargs="*", default=[], help="run .db files")
     v.add_argument("--port", type=int, default=8000)
 
     lab = sub.add_parser("label", help="export items for hand-labelling")
