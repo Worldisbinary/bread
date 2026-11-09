@@ -110,3 +110,43 @@ footer.links{font-size:12px;color:var(--muted);display:flex;flex-wrap:wrap;gap:1
   #left.open{display:block}.brand span{display:none}.userchip small,.userchip span{display:none}.hide-sm{display:none}
   #top{gap:8px;padding:0 10px}#loginBtn{display:none}.btn{padding:7px 12px}#main{min-width:0}.ptitle{font-size:16.5px}
 }
+
+/* ---------------------------------------------------------------- icons and polish */
+.ic{flex:none;vertical-align:-3px}
+#left a .ic{color:var(--muted)}#left a.on .ic,#left a:hover .ic{color:var(--brand)}
+.menu a,.menu button{display:flex;align-items:center;gap:10px}.menu .ic{color:var(--muted)}
+.btn .ic{margin-left:-2px}
+.act .ic{color:inherit}.act:hover{color:var(--ink)}.act.on .ic{fill:color-mix(in srgb,var(--brand) 25%,transparent)}
+.sorts button{display:inline-flex;align-items:center;gap:6px}.sorts button.on .ic{color:var(--brand)}
+.arrow .ic{transition:transform .12s ease}.arrow:hover .ic{transform:translateY(-1px)}.arrow.down:hover .ic{transform:translateY(1px)}
+.arrow.up.on .ic{fill:var(--up);stroke:var(--up)}.arrow.down.on .ic{fill:var(--down);stroke:var(--down)}
+.arrow.up:hover{color:var(--up)}.arrow.down:hover{color:var(--down)}
+.tools button{display:inline-grid;place-items:center;width:32px;height:30px;padding:0;color:var(--muted)}.tools button:hover{color:var(--ink);border-color:var(--brand)}
+.seg button{display:inline-flex;align-items:center;justify-content:center;gap:8px}
+.domain .ic{vertical-align:-2px}
+.sicon{display:grid;place-items:center}
+.ph{display:flex;align-items:center;gap:10px;margin:4px 0 10px}.ph .ic{color:var(--brand)}
+.tabs a{display:inline-flex;align-items:center;gap:6px}
+/* avatars and community badges */
+.avatar,.cicon{box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.25),0 1px 2px rgba(0,0,0,.15);text-shadow:0 1px 1px rgba(0,0,0,.18)}
+.avatar.botav{color:#fff}.avatar.botav .ic{stroke-width:2}
+.bigicon{box-shadow:0 0 0 4px var(--card),0 6px 18px rgba(0,0,0,.18)!important;border:0!important}
+/* notifications */
+.notif{display:flex;gap:10px;align-items:flex-start}.nicon{width:30px;height:30px;border-radius:999px;display:grid;place-items:center;flex:none;background:var(--chip);color:var(--brand)}
+.nicon.removed,.nicon.ban{color:var(--bad)}.nicon.mod{color:var(--good)}.nicon.ad{color:var(--link)}
+/* loading placeholders */
+.skel{pointer-events:none}.skel .pbody{display:grid;gap:10px;padding:14px}
+.sk{display:block;height:12px;border-radius:6px;background:linear-gradient(90deg,var(--chip) 25%,var(--card2) 50%,var(--chip) 75%);background-size:200% 100%;animation:shimmer 1.2s infinite}
+@keyframes shimmer{to{background-position:-200% 0}}
+/* empty states */
+.emptyart{width:72px;height:72px;opacity:.9;display:block;margin:0 auto 12px;filter:drop-shadow(0 6px 12px rgba(160,90,20,.25))}
+/* cards and buttons: a little depth and motion */
+.post{transition:border-color .15s,box-shadow .15s,transform .15s}.post:hover{box-shadow:0 4px 14px rgba(60,40,20,.08)}
+[data-theme=dark] .post:hover{box-shadow:0 4px 14px rgba(0,0,0,.35)}
+.btn{transition:background .15s,transform .08s,box-shadow .15s;box-shadow:0 1px 0 rgba(0,0,0,.08)}.btn:active{transform:scale(.97)}
+.btn:not(.ghost){background:linear-gradient(180deg,color-mix(in srgb,var(--brand) 88%,#fff),var(--brand))}
+.btn:not(.ghost):hover{background:var(--brand2)}.btn.danger{background:var(--bad)}.btn.good{background:var(--good)}
+.iconbtn{display:inline-grid;place-items:center;color:var(--ink)}
+.userchip{transition:background .15s}.userchip:hover{background:var(--card2)}
+#top{backdrop-filter:saturate(1.4) blur(8px);background:color-mix(in srgb,var(--card) 88%,transparent)}
+.badge.bot{display:inline-flex;align-items:center;gap:3px}

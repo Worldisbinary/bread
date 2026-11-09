@@ -1,5 +1,7 @@
 // bread: the browser app. A small router over the JSON API; every user-written string is escaped
 // and markdown is rendered by a safe, minimal renderer.
+import {icon} from "/static/icons.js";
+
 const $ = id => document.getElementById(id);
 const esc = t => String(t ?? "").replace(/[&<>"']/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]));
 const plural = (n, word) => `${fmt(n)} ${word}${+n === 1 ? "" : "s"}`;
@@ -60,10 +62,11 @@ function md(src) {
 }
 
 // ------------------------------------------------------------------ icons and small pieces
-const UP = `<svg viewBox="0 0 20 20" fill="currentColor"><path d="M10 3l7 8h-4.2v6H7.2v-6H3z"/></svg>`;
-const DOWN = `<svg viewBox="0 0 20 20" fill="currentColor"><path d="M10 17l-7-8h4.2V3h5.6v6H17z"/></svg>`;
-const avatar = (name, size = 32) => `<span class="avatar" style="width:${size}px;height:${size}px;background:${colorOf(name)};font-size:${size * 0.42}px">${esc(String(name)[0] || "?").toUpperCase()}</span>`;
-const cicon = (name, color, size = 24) => `<span class="cicon" style="width:${size}px;height:${size}px;background:${esc(color || colorOf(name))};font-size:${size * 0.45}px">${esc(String(name)[0]).toUpperCase()}</span>`;
+const UP = icon("up", 20);
+const DOWN = icon("down", 20);
+const grad = name => { const a = colorOf(name), b = COLORS[(COLORS.indexOf(a) + 3) % COLORS.length]; return `linear-gradient(135deg,${a},${b})`; };
+const avatar = (name, size = 32, isBot = false) => `<span class="avatar${isBot ? " botav" : ""}" style="width:${size}px;height:${size}px;background:${grad(name)};font-size:${size * 0.42}px">${isBot ? icon("bot", size * 0.6) : esc(String(name)[0] || "?").toUpperCase()}</span>`;
+const cicon = (name, color, size = 24) => `<span class="cicon" style="width:${size}px;height:${size}px;background:linear-gradient(135deg,${esc(color || colorOf(name))},${esc(color || colorOf(name))}99);font-size:${size * 0.45}px">${esc(String(name)[0]).toUpperCase()}</span>`;
 const userLink = (name, isBot) => name === "[deleted]" ? `<span>[deleted]</span>` : `<a href="/u/${esc(name)}" data-link>u/${esc(name)}</a>${isBot ? ` <span class="badge bot">bot</span>` : ""}`;
 function votes(kind, item, row = false) {
   const v = item.my_vote || 0, cls = v > 0 ? "up" : v < 0 ? "down" : "";
@@ -79,20 +82,20 @@ async function loadMe() { G.me = await api("me").then(m => (m.anonymous ? null :
 function chrome() {
   const me = G.me;
   $("topRight").innerHTML = me ? `
-      <a class="btn ghost hide-sm" href="/submit" data-link>＋ Create</a>
-      <a class="iconbtn" href="/notifications" data-link aria-label="Notifications">🔔${me.unread ? `<span class="dot">${me.unread}</span>` : ""}</a>
+      <a class="btn ghost hide-sm" href="/submit" data-link>${icon("plus")} Create</a>
+      <a class="iconbtn" href="/notifications" data-link aria-label="Notifications">${icon("bell", 20)}${me.unread ? `<span class="dot">${me.unread}</span>` : ""}</a>
       <button class="userchip" id="userBtn">${avatar(me.username)}<span><b>${esc(me.username)}</b><br><small>${fmt(me.karma)} karma</small></span></button>`
     : `<button class="btn ghost" id="loginBtn">Log in</button><button class="btn" id="signupBtn">Sign up</button>`;
   if (me) $("userBtn").onclick = e => { e.stopPropagation(); userMenu(); };
   else { $("loginBtn").onclick = () => authDialog("login"); $("signupBtn").onclick = () => authDialog("signup"); }
   const joined = me?.joined || [];
   $("left").innerHTML = `
-    <a href="/" data-link data-nav="home">🏠 Home</a><a href="/popular" data-link data-nav="popular">🔥 Popular</a>
-    <a href="/all" data-link data-nav="all">🌐 All</a><a href="/communities" data-link data-nav="communities">🧭 Explore communities</a>
-    <a href="/ads" data-link data-nav="ads">📣 Advertise</a>
+    <a href="/" data-link data-nav="home">${icon("home")} Home</a><a href="/popular" data-link data-nav="popular">${icon("flame")} Popular</a>
+    <a href="/all" data-link data-nav="all">${icon("globe")} All</a><a href="/communities" data-link data-nav="communities">${icon("compass")} Explore communities</a>
+    <a href="/ads" data-link data-nav="ads">${icon("megaphone")} Advertise</a>
     ${me ? `<h4>Your communities</h4>${joined.map(j => `<a href="/b/${esc(j.name)}" data-link>${cicon(j.name, j.color)}b/${esc(j.name)}${j.role !== "member" ? ` <span class="badge mod">${j.role === "owner" ? "owner" : "mod"}</span>` : ""}</a>`).join("")}
-      <a href="/communities/new" data-link>＋ Create a community</a>` : `<h4>bread</h4><div class="card small">Join to vote, comment and start your own communities.<br><br><button class="btn" id="leftJoin">Sign up</button></div>`}
-    <h4>More</h4><a href="/about" data-link>📖 How bread works</a>${me?.is_admin ? `<a href="/admin" data-link>🛡️ Admin</a>` : ""}`;
+      <a href="/communities/new" data-link>${icon("plus")} Create a community</a>` : `<h4>bread</h4><div class="card small">Join to vote, comment and start your own communities.<br><br><button class="btn" id="leftJoin">Sign up</button></div>`}
+    <h4>More</h4><a href="/about" data-link>${icon("book")} How bread works</a>${me?.is_admin ? `<a href="/admin" data-link>${icon("shield")} Admin</a>` : ""}`;
   $("leftJoin") && ($("leftJoin").onclick = () => authDialog("signup"));
   highlightNav();
 }
@@ -100,10 +103,10 @@ function highlightNav() { document.querySelectorAll("#left a").forEach(a => a.cl
 function userMenu() {
   closeMenu();
   const m = document.createElement("div"); m.className = "menu"; m.id = "menu";
-  m.innerHTML = `<a href="/u/${esc(G.me.username)}" data-link>👤 Profile</a><a href="/u/${esc(G.me.username)}/saved" data-link>🔖 Saved</a>
-    <a href="/u/${esc(G.me.username)}/bots" data-link>🤖 My bots and API</a><a href="/ads" data-link>📣 My ads</a>
-    <button id="themeBtn">${document.documentElement.dataset.theme === "dark" ? "☀️ Light mode" : "🌙 Dark mode"}</button>
-    ${G.me.is_admin ? `<a href="/admin" data-link>🛡️ Admin</a>` : `<a href="/admin" data-link>🛡️ Claim admin</a>`}<button id="logoutBtn">↪ Log out</button>`;
+  m.innerHTML = `<a href="/u/${esc(G.me.username)}" data-link>${icon("user")} Profile</a><a href="/u/${esc(G.me.username)}/saved" data-link>${icon("bookmark")} Saved</a>
+    <a href="/u/${esc(G.me.username)}/bots" data-link>${icon("bot")} My bots and API</a><a href="/ads" data-link>${icon("megaphone")} My ads</a>
+    <button id="themeBtn">${document.documentElement.dataset.theme === "dark" ? `${icon("sun")} Light mode` : `${icon("moon")} Dark mode`}</button>
+    ${G.me.is_admin ? `<a href="/admin" data-link>${icon("shield")} Admin</a>` : `<a href="/admin" data-link>${icon("shield")} Claim admin</a>`}<button id="logoutBtn">${icon("logout")} Log out</button>`;
   document.body.appendChild(m);
   $("themeBtn").onclick = () => { const t = document.documentElement.dataset.theme === "dark" ? "light" : "dark"; document.documentElement.dataset.theme = t; try { localStorage.setItem("bread-theme", t); } catch (e) {} closeMenu(); };
   $("logoutBtn").onclick = async () => { await api("logout", {}); G.me = null; closeMenu(); chrome(); route(); toast("Logged out"); };
@@ -159,7 +162,7 @@ document.addEventListener("click", e => {
 async function route() {
   const url = new URL(location.href), p = url.pathname.replace(/\/+$/, "") || "/", seg = p.split("/").filter(Boolean);
   G.path = p; highlightNav(); closeMenu(); window.scrollTo(0, 0);
-  $("main").innerHTML = `<div class="loading">Baking…</div>`;
+  $("main").innerHTML = skeleton();
   try {
     if (p === "/") return feedPage({scope: G.me ? "home" : "all", title: G.me ? "Home" : "All of bread"});
     if (p === "/popular") return feedPage({scope: "popular", title: "Popular"});
@@ -178,9 +181,13 @@ async function route() {
     if (seg[0] === "b" && seg[1]) return communityPage(seg[1], "posts");
     if (seg[0] === "u" && seg[1]) return profilePage(seg[1], seg[2] || "posts");
     notFound();
-  } catch (e) { if (e.status === 404) notFound(e.message); else $("main").innerHTML = `<div class="empty"><b>Something went wrong</b>${esc(e.message)}</div>`; }
+  } catch (e) { if (e.status === 404) notFound(e.message); else $("main").innerHTML = `<div class="empty"><img src="/static/logo.svg" alt="" class="emptyart"><b>Something went wrong</b>${esc(e.message)}</div>`; }
 }
-function notFound(msg = "That page does not exist.") { $("main").innerHTML = `<div class="empty"><b>Nothing here</b>${esc(msg)}<br><br><a class="btn" href="/" data-link>Go home</a></div>`; setSide(homeSide()); }
+function skeleton(n = 4) {
+  return Array.from({length: n}, () => `<div class="post skel"><div class="votes"><i class="sk" style="width:18px;height:60px"></i></div>
+    <div class="pbody"><i class="sk" style="width:40%"></i><i class="sk" style="width:85%;height:18px"></i><i class="sk" style="width:70%"></i><i class="sk" style="width:55%"></i></div></div>`).join("");
+}
+function notFound(msg = "That page does not exist.") { $("main").innerHTML = `<div class="empty"><img src="/static/logo.svg" alt="" class="emptyart"><b>Nothing here</b>${esc(msg)}<br><br><a class="btn" href="/" data-link>Go home</a></div>`; setSide(homeSide()); }
 function setSide(html) { $("side").innerHTML = html + footerLinks(); }
 const footerLinks = () => `<footer class="links"><a href="/about" data-link>How bread works</a><a href="/policy" data-link>Content policy</a><a href="/privacy" data-link>Privacy</a><a href="/terms" data-link>Terms</a><a href="/ads" data-link>Advertise</a><span>© bread</span></footer>`;
 
@@ -191,29 +198,29 @@ function postCard(p, opts = {}) {
     <div class="meta">${opts.hideCommunity ? "" : `${cicon(p.community, p.community_color, 20)}<a class="com" href="/b/${esc(p.community)}" data-link>b/${esc(p.community)}</a>•`}
       <span>Posted by ${userLink(p.author, p.author_is_bot)}</span><span>${ago(p.created_at)}</span>
       ${p.pinned ? `<span class="badge pin">pinned</span>` : ""}${p.locked ? `<span class="badge">locked</span>` : ""}${p.removed ? `<span class="badge removed">removed</span>` : ""}${p.edited_at ? `<span>(edited)</span>` : ""}</div>
-    <div class="ptitle"><a href="${postLink(p)}" data-link>${esc(p.title)}</a>${host ? `<a class="domain" href="${esc(p.url)}" target="_blank" rel="nofollow ugc noopener">${esc(host)} ↗</a>` : ""}</div>
+    <div class="ptitle"><a href="${postLink(p)}" data-link>${esc(p.title)}</a>${host ? `<a class="domain" href="${esc(p.url)}" target="_blank" rel="nofollow ugc noopener">${esc(host)} ${icon("external", 13)}</a>` : ""}</div>
     ${p.body ? `<div class="md preview">${md(p.body)}</div>` : ""}
     ${postActions(p, opts)}</div></article>`;
 }
 function postActions(p, opts = {}) {
   const mine = G.me && G.me.username === p.author, mod = opts.mod;
-  return `<div class="actions" data-post="${p.id}"><a class="act" href="${postLink(p)}" data-link>💬 ${plural(p.comment_count, "comment")}</a>
-    <button class="act" data-act="share">↗ Share</button><button class="act${p.saved ? " on" : ""}" data-act="save">${p.saved ? "🔖 Saved" : "🔖 Save"}</button>
-    ${mine ? `${opts.full ? `<button class="act" data-act="edit">✏️ Edit</button>` : ""}<button class="act" data-act="delete">🗑 Delete</button>` : `<button class="act" data-act="report">⚑ Report</button>`}
-    ${mod ? `<button class="act" data-act="${p.removed ? "approve" : "remove"}">${p.removed ? "✅ Approve" : "⛔ Remove"}</button>
-      <button class="act" data-act="${p.locked ? "unlock" : "lock"}">${p.locked ? "🔓 Unlock" : "🔒 Lock"}</button>
-      <button class="act" data-act="${p.pinned ? "unpin" : "pin"}">📌 ${p.pinned ? "Unpin" : "Pin"}</button>` : ""}</div>`;
+  return `<div class="actions" data-post="${p.id}"><a class="act" href="${postLink(p)}" data-link>${icon("message")} ${plural(p.comment_count, "comment")}</a>
+    <button class="act" data-act="share">${icon("share")} Share</button><button class="act${p.saved ? " on" : ""}" data-act="save">${icon("bookmark")} ${p.saved ? "Saved" : "Save"}</button>
+    ${mine ? `${opts.full ? `<button class="act" data-act="edit">${icon("pencil")} Edit</button>` : ""}<button class="act" data-act="delete">${icon("trash")} Delete</button>` : `<button class="act" data-act="report">${icon("flag")} Report</button>`}
+    ${mod ? `<button class="act" data-act="${p.removed ? "approve" : "remove"}">${p.removed ? `${icon("checkCircle")} Approve` : `${icon("ban")} Remove`}</button>
+      <button class="act" data-act="${p.locked ? "unlock" : "lock"}">${p.locked ? `${icon("unlock")} Unlock` : `${icon("lock")} Lock`}</button>
+      <button class="act" data-act="${p.pinned ? "unpin" : "pin"}">${icon("pin")} ${p.pinned ? "Unpin" : "Pin"}</button>` : ""}</div>`;
 }
 function adCard(a) {
   return `<article class="post ad"><div class="votes" style="justify-content:center"><span class="badge sponsored">ad</span></div><div class="pbody">
     <div class="meta"><span class="badge sponsored">Sponsored</span><span>by u/${esc(a.advertiser)}</span></div>
-    <div class="ptitle"><a href="/go/ad/${a.id}" target="_blank" rel="sponsored noopener">${esc(a.title)}</a><span class="domain">${esc(domain(a.url))} ↗</span></div>
+    <div class="ptitle"><a href="/go/ad/${a.id}" target="_blank" rel="sponsored noopener">${esc(a.title)}</a><span class="domain">${esc(domain(a.url))} ${icon("external", 13)}</span></div>
     ${a.body ? `<div class="md small">${esc(a.body)}</div>` : ""}
     <div class="actions"><a class="btn sm" href="/go/ad/${a.id}" target="_blank" rel="sponsored noopener">Learn more</a><a class="act" href="/ads" data-link>Why am I seeing this? Advertise on bread</a></div></div></article>`;
 }
 function sorts(current, t, base) {
-  const list = [["hot", "🔥 Hot"], ["new", "✨ New"], ["top", "📈 Top"], ["rising", "🚀 Rising"], ["controversial", "⚡ Controversial"]];
-  return `<div class="sorts">${list.map(([k, l]) => `<button class="${k === current ? "on" : ""}" data-sort="${k}">${l}</button>`).join("")}
+  const list = [["hot", "flame", "Hot"], ["new", "sparkles", "New"], ["top", "trending", "Top"], ["rising", "rocket", "Rising"], ["controversial", "zap", "Controversial"]];
+  return `<div class="sorts">${list.map(([k, ic, l]) => `<button class="${k === current ? "on" : ""}" data-sort="${k}">${icon(ic, 16)} ${l}</button>`).join("")}
     ${current === "top" ? `<select id="tsel">${["hour", "day", "week", "month", "year", "all"].map(x => `<option value="${x}"${x === t ? " selected" : ""}>${x === "all" ? "All time" : "Past " + x}</option>`).join("")}</select>` : ""}</div>`;
 }
 function interleave(posts, ads, opts) {
@@ -230,7 +237,7 @@ async function feedList(el, load, opts = {}) {
   $("tsel") && ($("tsel").onchange = () => { url.searchParams.set("t", $("tsel").value); go(url.pathname + url.search); });
   const more = async () => {
     const data = await load(sort, t, page);
-    if (!data.posts.length && page === 0) $("posts").innerHTML = opts.empty || `<div class="empty"><b>No posts yet</b>Be the first to start a conversation.</div>`;
+    if (!data.posts.length && page === 0) $("posts").innerHTML = opts.empty || `<div class="empty"><img src="/static/logo.svg" alt="" class="emptyart"><b>No posts yet</b>Be the first to start a conversation.</div>`;
     else $("posts").insertAdjacentHTML("beforeend", interleave(data.posts, [...(data.ads || [])], opts));
     $("moreBtn").classList.toggle("hidden", !data.more); page++;
     wire($("posts"));
@@ -241,7 +248,7 @@ async function feedList(el, load, opts = {}) {
 async function feedPage({scope, title}) {
   $("main").innerHTML = `<h2 style="margin:4px 0 10px">${esc(title)}</h2><div id="fl"></div>`;
   setSide(homeSide());
-  const empty = scope === "home" ? `<div class="empty"><b>Your home feed is quiet</b>Join communities to fill it up.<br><br><a class="btn" href="/communities" data-link>Explore communities</a></div>` : "";
+  const empty = scope === "home" ? `<div class="empty"><img src="/static/logo.svg" alt="" class="emptyart"><b>Your home feed is quiet</b>Join communities to fill it up.<br><br><a class="btn" href="/communities" data-link>Explore communities</a></div>` : "";
   await feedList($("fl"), (sort, t, page) => api(`feed?scope=${scope}&sort=${sort}&t=${t}&page=${page}`), {empty});
 }
 function homeSide() {
@@ -274,7 +281,7 @@ async function postAction(b, id) {
   if (act === "share") { const url = location.origin + (b.closest(".post")?.querySelector(".ptitle a")?.getAttribute("href") || location.pathname); navigator.clipboard?.writeText(url); toast("Link copied"); return; }
   if (needLogin()) return;
   try {
-    if (act === "save") { const saving = !b.classList.contains("on"); await api("save", {post_id: id, save: saving}); b.classList.toggle("on", saving); b.textContent = saving ? "🔖 Saved" : "🔖 Save"; toast(saving ? "Saved" : "Removed from saved"); }
+    if (act === "save") { const saving = !b.classList.contains("on"); await api("save", {post_id: id, save: saving}); b.classList.toggle("on", saving); b.innerHTML = `${icon("bookmark")} ${saving ? "Saved" : "Save"}`; toast(saving ? "Saved" : "Removed from saved"); }
     if (act === "report") { const reason = await prompt2("Report post", "What rule does it break?", "e.g. spam, harassment, off topic"); if (reason === null) return; await api("report", {kind: "p", id, reason}); toast("Thanks. The moderators will look at it."); }
     if (act === "delete") { if (!confirm("Delete this post?")) return; await api(`posts/${id}`, undefined, "DELETE"); toast("Deleted"); route(); }
     if (act === "edit") editPost(id);
@@ -293,9 +300,9 @@ async function communityPage(name, tab) {
     <div class="row"><span class="bigicon" style="background:${esc(com.color)}">${esc(com.name[0].toUpperCase())}</span>
       <div class="grow"><h1>${esc(com.title)}</h1><div class="muted small">b/${esc(com.name)} · ${plural(com.members, "member")}${com.restricted ? " · moderators post" : ""}${com.allow_bots ? "" : " · no bots"}</div></div>
       ${com.role ? `<button class="btn ghost" id="joinBtn">${com.role === "owner" ? "Owner" : "Joined"}</button>` : `<button class="btn" id="joinBtn">Join</button>`}
-      <a class="btn ghost hide-sm" href="/submit?community=${esc(com.name)}" data-link>＋ Post</a></div>
+      <a class="btn ghost hide-sm" href="/submit?community=${esc(com.name)}" data-link>${icon("plus")} Post</a></div>
     <div class="tabs"><a href="/b/${esc(com.name)}" data-link class="${tab === "posts" ? "on" : ""}">Posts</a><a href="/b/${esc(com.name)}/about" data-link class="${tab === "about" ? "on" : ""}">About</a>
-      ${com.is_mod ? `<a href="/b/${esc(com.name)}/mod" data-link>🛡️ Mod tools</a>` : ""}</div></div><div id="cbody"></div>`;
+      ${com.is_mod ? `<a href="/b/${esc(com.name)}/mod" data-link>${icon("shield", 16)} Mod tools</a>` : ""}</div></div><div id="cbody"></div>`;
   $("joinBtn").onclick = async () => {
     if (needLogin("Log in to join communities")) return;
     if (com.role === "owner") return toast("You own this community.");
@@ -332,7 +339,7 @@ async function newCommunityPage() {
       <label>Title<input type="text" id="cTitle" maxlength="100" placeholder="A friendly display name"></label>
       <label>Description<textarea id="cDesc" maxlength="500" placeholder="What is this community about?"></textarea></label>
       <label>Rules <span class="hint">Your moderators and AutoMod will enforce these, on top of the site policy.</span><div id="rulesBox" style="display:grid;gap:6px"></div>
-        <button type="button" class="btn ghost sm" id="addRule" style="justify-self:start">＋ Add a rule</button></label>
+        <button type="button" class="btn ghost sm" id="addRule" style="justify-self:start">${icon("plus", 16)} Add a rule</button></label>
       <label>Colour<input type="color" id="cColor" value="${colorOf(me.username)}" style="width:60px;height:36px;border:0;background:none"></label>
       <button class="btn" ${me.can_found ? "" : "disabled"}>Create community</button></form></div>`;
   const addRule = v => { const i = document.createElement("input"); i.type = "text"; i.maxLength = 200; i.placeholder = "e.g. Stay on topic"; i.value = v || ""; $("rulesBox").appendChild(i); };
@@ -352,8 +359,8 @@ async function newCommunityPage() {
 
 // ------------------------------------------------------------------ submitting
 function editorTools(id) {
-  return `<div class="tools" data-for="${id}"><button type="button" data-w="**">B</button><button type="button" data-w="*"><i>I</i></button>
-    <button type="button" data-w="\`">&lt;/&gt;</button><button type="button" data-link-tool>🔗</button><button type="button" data-quote>❝</button></div>`;
+  return `<div class="tools" data-for="${id}"><button type="button" data-w="**" title="Bold">${icon("bold", 16)}</button><button type="button" data-w="*" title="Italic">${icon("italic", 16)}</button>
+    <button type="button" data-w="\`" title="Code">${icon("code", 16)}</button><button type="button" data-link-tool title="Link">${icon("link", 16)}</button><button type="button" data-quote title="Quote">${icon("quote", 16)}</button></div>`;
 }
 function wireTools(root) {
   root.querySelectorAll(".tools").forEach(t => {
@@ -370,7 +377,7 @@ async function submitPage(preset) {
     ${me.can_post ? "" : `<div class="gate">You need more than ${th.post - 1} karma to post; you have ${me.karma}. Comment on posts you like: when people upvote your comments, you earn karma. (Moderators can always post in their own communities.)</div><br>`}
     <form class="form" id="sForm"><label>Community<select class="field" id="sCom">${me.joined.map(j => `<option value="${esc(j.name)}"${j.name === preset ? " selected" : ""}>b/${esc(j.name)}</option>`).join("")}</select>
       <span class="hint">Only communities you have joined are listed. <a href="/communities" data-link style="color:var(--link)">Find more</a></span></label>
-      <div class="seg"><button type="button" class="on" data-kind="text">📝 Text</button><button type="button" data-kind="link">🔗 Link</button></div>
+      <div class="seg"><button type="button" class="on" data-kind="text">${icon("text")} Text</button><button type="button" data-kind="link">${icon("link")} Link</button></div>
       <label>Title<input type="text" id="sTitle" maxlength="300" required></label>
       <label id="urlRow" class="hidden">Link<input type="url" id="sUrl" placeholder="https://"></label>
       <label>Body <span class="hint">Markdown: **bold**, *italic*, [links](https://…), &gt; quotes, \`code\`, - lists</span>${editorTools("sBody")}<textarea id="sBody" maxlength="20000"></textarea></label>
@@ -396,13 +403,13 @@ async function postPage(id, sort) {
   $("main").innerHTML = `<article class="post full">${votes("p", p)}<div class="pbody">
       <div class="meta">${cicon(p.community, p.community_color, 20)}<a class="com" href="/b/${esc(p.community)}" data-link>b/${esc(p.community)}</a>•<span>Posted by ${userLink(p.author, p.author_is_bot)}</span><span>${ago(p.created_at)}</span>
         ${p.locked ? `<span class="badge">locked</span>` : ""}${p.removed ? `<span class="badge removed">removed${p.removed_reason ? ": " + esc(p.removed_reason) : ""}</span>` : ""}${p.edited_at ? "<span>(edited)</span>" : ""}</div>
-      <h1 class="ptitle">${esc(p.title)}</h1>${host ? `<a class="domain" href="${esc(p.url)}" target="_blank" rel="nofollow ugc noopener">${esc(p.url)} ↗</a>` : ""}
+      <h1 class="ptitle">${esc(p.title)}</h1>${host ? `<a class="domain" href="${esc(p.url)}" target="_blank" rel="nofollow ugc noopener">${esc(p.url)} ${icon("external", 13)}</a>` : ""}
       <div class="md" id="pBody">${md(p.body)}</div>${postActions(p, {full: true, mod: com.is_mod})}
       <div class="composer">${p.locked && !com.is_mod ? `<div class="gate">Comments are locked.</div>` : G.me ? `${editorTools("cText")}<textarea id="cText" placeholder="What are your thoughts?"></textarea>
         <div style="display:flex;justify-content:flex-end;margin-top:6px"><button class="btn" id="cSend">Comment</button></div>` :
         `<div class="gate">Log in to comment. New accounts can comment right away: it is how you earn karma.</div>`}</div>
       <div class="sorts" style="margin-top:14px">${["best", "top", "new", "old", "controversial"].map(s => `<button data-csort="${s}" class="${s === sort ? "on" : ""}">${s[0].toUpperCase() + s.slice(1)}</button>`).join("")}</div>
-      <div id="thread">${data.comments.map(c => commentHtml(c, com.is_mod, p.locked)).join("") || `<div class="empty"><b>No comments yet</b>Be the first to share what you think.</div>`}</div>
+      <div id="thread">${data.comments.map(c => commentHtml(c, com.is_mod, p.locked)).join("") || `<div class="empty"><img src="/static/logo.svg" alt="" class="emptyart"><b>No comments yet</b>Be the first to share what you think.</div>`}</div>
     </div></article>${(data.ads || []).map(adCard).join("")}`;
   setSide(communitySide(com));
   wire($("main")); wireTools($("main"));
@@ -417,15 +424,15 @@ async function postPage(id, sort) {
 function commentHtml(c, mod, locked) {
   const mine = G.me && G.me.username === c.author, gone = c.deleted || (c.removed && !c.body);
   return `<div class="comment" id="c${c.id}" data-id="${c.id}"><button class="line" aria-label="Collapse"></button>
-    <div class="head">${avatar(c.author === "[deleted]" ? "?" : c.author, 24)}${c.author === "[deleted]" ? "<b>[deleted]</b>" : `<b>${userLink(c.author, c.author_is_bot)}</b>`}<span>· ${ago(c.created_at)}</span>${c.edited_at ? "<span>(edited)</span>" : ""}
+    <div class="head">${avatar(c.author === "[deleted]" ? "?" : c.author, 26, c.author_is_bot)}${c.author === "[deleted]" ? "<b>[deleted]</b>" : `<b>${userLink(c.author, c.author_is_bot)}</b>`}<span>· ${ago(c.created_at)}</span>${c.edited_at ? "<span>(edited)</span>" : ""}
       ${c.removed ? `<span class="badge removed">removed${c.removed_by ? " by " + esc(c.removed_by) : ""}</span>` : ""}</div>
     <div class="cb"><div class="md">${gone ? `<p class="muted">${c.deleted ? "[deleted]" : "[removed by moderators]"}</p>` : md(c.body)}</div>
       <div class="actions">${gone ? "" : votes("c", c, true)}
-        ${!gone && !(locked && !mod) ? `<button class="act" data-cact="reply">💬 Reply</button>` : ""}
-        <a class="act" href="#c${c.id}">🔗 Link</a>
-        ${mine && !gone ? `<button class="act" data-cact="edit">✏️ Edit</button><button class="act" data-cact="delete">🗑 Delete</button>` : ""}
-        ${!mine && !gone ? `<button class="act" data-cact="report">⚑ Report</button>` : ""}
-        ${mod ? `<button class="act" data-cact="${c.removed ? "approve" : "remove"}">${c.removed ? "✅ Approve" : "⛔ Remove"}</button>` : ""}</div>
+        ${!gone && !(locked && !mod) ? `<button class="act" data-cact="reply">${icon("message", 16)} Reply</button>` : ""}
+        <a class="act" href="#c${c.id}">${icon("link", 16)} Link</a>
+        ${mine && !gone ? `<button class="act" data-cact="edit">${icon("pencil", 16)} Edit</button><button class="act" data-cact="delete">${icon("trash", 16)} Delete</button>` : ""}
+        ${!mine && !gone ? `<button class="act" data-cact="report">${icon("flag", 16)} Report</button>` : ""}
+        ${mod ? `<button class="act" data-cact="${c.removed ? "approve" : "remove"}">${c.removed ? `${icon("checkCircle", 16)} Approve` : `${icon("ban", 16)} Remove`}</button>` : ""}</div>
       <div class="replybox"></div></div>
     <div class="kids">${(c.replies || []).map(r => commentHtml(r, mod, locked)).join("")}</div></div>`;
 }
@@ -467,23 +474,23 @@ async function editPost(id) {
 async function profilePage(name, tab) {
   const u = await api(`users/${encodeURIComponent(name)}`), mine = G.me && G.me.username === u.username;
   $("main").innerHTML = `<div class="chead"><div class="banner" style="background:linear-gradient(120deg,${colorOf(u.username)},#f1c27d)"></div>
-    <div class="row">${avatar(u.username, 72).replace('class="avatar"', 'class="avatar bigicon"')}<div class="grow"><h1>${esc(u.username)} ${u.is_bot ? `<span class="badge bot">bot</span>` : ""}${u.is_admin ? ` <span class="badge mod">admin</span>` : ""}</h1>
+    <div class="row">${avatar(u.username, 72, u.is_bot).replace('class="avatar', 'class="bigicon avatar')}<div class="grow"><h1>${esc(u.username)} ${u.is_bot ? `<span class="badge bot">bot</span>` : ""}${u.is_admin ? ` <span class="badge mod">admin</span>` : ""}</h1>
       <div class="muted small">u/${esc(u.username)} · ${fmt(u.karma)} karma · joined ${date(u.created_at)}${u.owner ? ` · run by ${userLink(u.owner)}` : ""}</div></div></div>
     <div class="tabs"><a href="/u/${esc(u.username)}" data-link class="${tab === "posts" ? "on" : ""}">Posts</a><a href="/u/${esc(u.username)}/comments" data-link class="${tab === "comments" ? "on" : ""}">Comments</a>
       ${mine ? `<a href="/u/${esc(u.username)}/saved" data-link class="${tab === "saved" ? "on" : ""}">Saved</a><a href="/u/${esc(u.username)}/bots" data-link class="${tab === "bots" ? "on" : ""}">Bots and API</a>
       <a href="/u/${esc(u.username)}/settings" data-link class="${tab === "settings" ? "on" : ""}">Settings</a>` : ""}</div></div><div id="ubody"></div>`;
-  setSide(`<div class="card">${avatar(u.username, 48)}<h3 style="margin-top:8px">u/${esc(u.username)}</h3><div class="md small">${md(u.bio || (u.is_bot ? "An AI agent." : "No bio yet."))}</div>
+  setSide(`<div class="card">${avatar(u.username, 48, u.is_bot)}<h3 style="margin-top:8px">u/${esc(u.username)}</h3><div class="md small">${md(u.bio || (u.is_bot ? "An AI agent." : "No bio yet."))}</div>
     <div class="kpis" style="margin-top:10px"><div class="kpi"><b>${fmt(u.post_karma)}</b><small>post karma</small></div><div class="kpi"><b>${fmt(u.comment_karma)}</b><small>comment karma</small></div></div>
     ${u.moderates.length ? `<h3 style="margin-top:12px">Moderates</h3>${u.moderates.map(m => `<div class="small"><a href="/b/${esc(m)}" data-link>b/${esc(m)}</a></div>`).join("")}` : ""}</div>`);
   const body = $("ubody");
   if (tab === "comments") {
-    body.innerHTML = u.comments.map(c => `<div class="card"><div class="meta"><a class="com" href="/b/${esc(c.community)}" data-link>b/${esc(c.community)}</a>·<a href="/b/${esc(c.community)}/comments/${c.post_id}#c${c.id}" data-link>${esc(c.title)}</a>·${ago(c.created_at)}·${fmt(c.score)} points</div><div class="md small">${md(c.body)}</div></div>`).join("") || `<div class="empty"><b>No comments yet</b></div>`;
+    body.innerHTML = u.comments.map(c => `<div class="card"><div class="meta"><a class="com" href="/b/${esc(c.community)}" data-link>b/${esc(c.community)}</a>·<a href="/b/${esc(c.community)}/comments/${c.post_id}#c${c.id}" data-link>${esc(c.title)}</a>·${ago(c.created_at)}·${fmt(c.score)} points</div><div class="md small">${md(c.body)}</div></div>`).join("") || `<div class="empty"><img src="/static/logo.svg" alt="" class="emptyart"><b>No comments yet</b></div>`;
   } else if (tab === "saved" && mine) {
-    const s = await api("saved"); body.innerHTML = s.posts.map(p => postCard(p)).join("") || `<div class="empty"><b>Nothing saved</b>Tap Save on any post to keep it here.</div>`; wire(body);
+    const s = await api("saved"); body.innerHTML = s.posts.map(p => postCard(p)).join("") || `<div class="empty"><img src="/static/logo.svg" alt="" class="emptyart"><b>Nothing saved</b>Tap Save on any post to keep it here.</div>`; wire(body);
   } else if (tab === "bots" && mine) {
     const bots = await api("bots");
     body.innerHTML = `<div class="card"><h3>Your AI agents</h3><p class="small muted">Register an agent to post, comment and vote through the API. Agents are always labelled bot, follow the same karma rules, and AutoMod checks everything they write. You need ${G.thresholds.post} karma to register one.</p>
-      ${bots.map(b => `<div class="small">🤖 ${userLink(b.username, true)} · ${fmt(b.karma)} karma</div>`).join("") || `<p class="small">No agents yet.</p>`}
+      ${bots.map(b => `<div class="small" style="display:flex;gap:8px;align-items:center">${icon("bot")} ${userLink(b.username, true)} · ${fmt(b.karma)} karma</div>`).join("") || `<p class="small">No agents yet.</p>`}
       <form class="form" id="botForm" style="margin-top:10px"><label>Agent username<input type="text" id="bName" maxlength="20" placeholder="e.g. summary_bot" required></label>
       <label>What does it do?<input type="text" id="bAbout" maxlength="300"></label><button class="btn">Register agent</button></form><div id="botKey"></div></div>
       <div class="card"><h3>API quick start</h3><div class="md small">${md("Send the key as a bearer token. Everything a person can do, an agent can do through the same endpoints.\n\n```\ncurl -H \"Authorization: Bearer bread_...\" " + location.origin + "/api/feed?scope=all\ncurl -X POST -H \"Authorization: Bearer bread_...\" -H \"Content-Type: application/json\" \\\n  -d '{\"body\": \"Hello from my agent\"}' " + location.origin + "/api/posts/1/comments\n```\n\nFull reference: [" + location.origin + "/api/docs](" + location.origin + "/api/docs)")}</div></div>`;
@@ -496,7 +503,7 @@ async function profilePage(name, tab) {
     body.innerHTML = `<div class="card"><form class="form" id="bioForm"><label>Bio<textarea id="bio" maxlength="300">${esc(G.me.bio || "")}</textarea></label><button class="btn">Save</button></form></div>`;
     $("bioForm").onsubmit = async e => { e.preventDefault(); try { await api("me", {bio: $("bio").value}, "PATCH"); await loadMe(); toast("Saved"); } catch (err) { toast(err.message); } };
   } else {
-    body.innerHTML = u.posts.map(p => postCard(p)).join("") || `<div class="empty"><b>No posts yet</b></div>`; wire(body);
+    body.innerHTML = u.posts.map(p => postCard(p)).join("") || `<div class="empty"><img src="/static/logo.svg" alt="" class="emptyart"><b>No posts yet</b></div>`; wire(body);
   }
 }
 
@@ -506,15 +513,15 @@ async function searchPage(q) {
   const r = await api("search?q=" + encodeURIComponent(q));
   $("main").innerHTML = `<h2 style="margin:4px 0 10px">Results for “${esc(q)}”</h2>
     ${r.communities.length ? `<div class="card list"><h3>Communities</h3>${r.communities.map(c => `<a class="item" href="/b/${esc(c.name)}" data-link>${cicon(c.name, c.color, 32)}<div><b>b/${esc(c.name)}</b><div class="tiny muted">${plural(c.members, "member")} · ${esc(c.description).slice(0, 90)}</div></div></a>`).join("")}</div>` : ""}
-    ${r.users.length ? `<div class="card list"><h3>People and agents</h3>${r.users.map(u => `<a class="item" href="/u/${esc(u.username)}" data-link>${avatar(u.username)}<div><b>u/${esc(u.username)}</b> ${u.is_bot ? `<span class="badge bot">bot</span>` : ""}<div class="tiny muted">${fmt(u.karma)} karma</div></div></a>`).join("")}</div>` : ""}
-    <h3>Posts</h3>${r.posts.map(p => postCard(p)).join("") || `<div class="empty"><b>No posts found</b>Try different words.</div>`}`;
+    ${r.users.length ? `<div class="card list"><h3>People and agents</h3>${r.users.map(u => `<a class="item" href="/u/${esc(u.username)}" data-link>${avatar(u.username, 32, u.is_bot)}<div><b>u/${esc(u.username)}</b> ${u.is_bot ? `<span class="badge bot">bot</span>` : ""}<div class="tiny muted">${fmt(u.karma)} karma</div></div></a>`).join("")}</div>` : ""}
+    <h3>Posts</h3>${r.posts.map(p => postCard(p)).join("") || `<div class="empty"><img src="/static/logo.svg" alt="" class="emptyart"><b>No posts found</b>Try different words.</div>`}`;
   wire($("main")); setSide(homeSide());
 }
 async function notificationsPage() {
   if (needLogin()) return notFound("Log in first.");
   const list = await api("notifications");
   $("main").innerHTML = `<h2 style="margin:4px 0 10px">Notifications</h2>${list.map(n => `<a class="card" style="display:block" href="${esc(n.link || "#")}" data-link>
-    <div class="small">${{reply: "💬", removed: "⛔", ban: "🚫", mod: "🛡️", ad: "📣"}[n.kind] || "🔔"} ${esc(n.text)}</div><div class="tiny muted">${ago(n.created_at)}</div></a>`).join("") || `<div class="empty"><b>All caught up</b></div>`}`;
+    <div class="small notif"><span class="nicon ${esc(n.kind)}">${icon({reply: "message", removed: "ban", ban: "ban", mod: "shield", ad: "megaphone"}[n.kind] || "bell", 16)}</span><span>${esc(n.text)}</span></div><div class="tiny muted">${ago(n.created_at)}</div></a>`).join("") || `<div class="empty"><img src="/static/logo.svg" alt="" class="emptyart"><b>All caught up</b></div>`}`;
   setSide(homeSide()); await loadMe();
 }
 
@@ -527,12 +534,12 @@ async function modPage(name) {
     const it = q.items[key]; if (!it) return "";
     const kind = key[0], id = +key.slice(1), title = kind === "p" ? `<b>${esc(it.title)}</b><br>` : "";
     const link = kind === "p" ? `/b/${com.name}/comments/${id}` : `/b/${com.name}/comments/${it.post_id}#c${id}`;
-    return `<div class="card"><div class="meta">${kind === "p" ? "Post" : "Comment"} by ${userLink(it.author)} · ${ago(it.created_at)} ${it.removed ? `<span class="badge removed">removed by ${esc(it.removed_by || "")}</span>` : ""}<a href="${link}" data-link>open ↗</a></div>
+    return `<div class="card"><div class="meta">${kind === "p" ? "Post" : "Comment"} by ${userLink(it.author)} · ${ago(it.created_at)} ${it.removed ? `<span class="badge removed">removed by ${esc(it.removed_by || "")}</span>` : ""}<a href="${link}" data-link>open ${icon("external", 13)}</a></div>
       <div class="md small">${title}${md((it.body || "").slice(0, 600))}</div>${it.removed_reason ? `<div class="tiny muted">${esc(it.removed_reason)}</div>` : ""}
       <div class="actions"><button class="btn sm good" data-m="approve" data-k="${kind}" data-i="${id}">Approve</button><button class="btn sm danger" data-m="remove" data-k="${kind}" data-i="${id}">Remove</button>
       <button class="btn sm ghost" data-ban="${esc(it.author)}">Ban u/${esc(it.author)}</button></div></div>`;
   };
-  $("main").innerHTML = `<h2 style="margin:4px 0 4px">🛡️ Mod tools · b/${esc(com.name)}</h2><p class="muted small">AutoMod checks every post and comment first. Approving something AutoMod removed teaches us where it is wrong.</p>
+  $("main").innerHTML = `<h2 class="ph">${icon("shield", 22)} Mod tools · b/${esc(com.name)}</h2><p class="muted small">AutoMod checks every post and comment first. Approving something AutoMod removed teaches us where it is wrong.</p>
     <h3>Reports (${q.reports.length})</h3>${q.reports.map(r => `<div class="tiny muted" style="margin:10px 0 -6px">Reported by ${esc(r.reporter)}: ${esc(r.reason)} · <a href="#" data-dismiss="${r.id}" style="color:var(--link)">dismiss</a></div>${itemHtml(r.kind + r.target_id)}`).join("") || `<p class="small muted">No open reports.</p>`}
     <h3>Removed by AutoMod</h3>${q.removed.map(itemHtml).join("") || `<p class="small muted">Nothing removed recently.</p>`}
     <h3>Moderators</h3><div class="card">${com.mods.map(m => `<div class="small">${userLink(m.username)} ${m.role === "owner" ? `<span class="badge mod">owner</span>` : com.role === "owner" ? `<a href="#" data-unmod="${esc(m.username)}" style="color:var(--link)">remove</a>` : ""}</div>`).join("")}
@@ -563,7 +570,7 @@ async function modPage(name) {
 // ------------------------------------------------------------------ ads
 async function adsPage() {
   const mine = G.me ? await api("ads/mine") : [];
-  $("main").innerHTML = `<div class="card"><h2 style="margin-top:0">📣 Advertise on bread</h2>
+  $("main").innerHTML = `<div class="card"><h2 class="ph" style="margin-top:0">${icon("megaphone", 22)} Advertise on bread</h2>
     <p class="small">Reach communities with a sponsored post. Every ad is reviewed by a person before it runs, is clearly labelled <span class="badge sponsored">Sponsored</span>, and must follow the content policy. Advertising is free while bread is new.</p>
     ${G.me ? `<form class="form" id="adForm"><label>Headline<input type="text" id="adTitle" maxlength="200" required></label>
       <label>Text<textarea id="adBody" maxlength="600" style="min-height:70px"></textarea></label><label>Link<input type="url" id="adUrl" placeholder="https://" required></label>
@@ -594,7 +601,7 @@ async function adminPage() {
   const s = await api("admin/stats");
   const kpi = (l, v) => `<div class="kpi"><b>${fmt(v)}</b><small>${l}</small></div>`;
   const removals = s.automod.filter(d => d.action === "remove"), removed = removals.reduce((a, d) => a + d.count, 0), over = removals.reduce((a, d) => a + d.overturned, 0);
-  $("main").innerHTML = `<h2 style="margin:4px 0 10px">🛡️ Admin</h2>
+  $("main").innerHTML = `<h2 class="ph">${icon("shield", 22)} Admin</h2>
     <div class="card"><div class="kpis">${kpi("people", s.users)}${kpi("new today", s.new_users_24h)}${kpi("AI agents", s.bots)}${kpi("communities", s.communities)}${kpi("posts", s.posts)}${kpi("posts today", s.posts_24h)}
       ${kpi("comments", s.comments)}${kpi("comments today", s.comments_24h)}${kpi("votes", s.votes)}${kpi("open reports", s.open_reports)}</div></div>
     <div class="card"><h3>AutoMod</h3><p class="small muted">Removals overturned by human moderators: <b>${over} of ${removed}</b>${removed ? ` (${(100 * over / removed).toFixed(1)}%). Lower is better.` : "."} LLM calls today: ${s.llm.used_today} / ${s.llm.cap}${s.llm.attached ? "" : " (no LLM key: rules only)"} · review backlog ${s.review_backlog}</p>
@@ -604,7 +611,7 @@ async function adminPage() {
       <div class="actions"><button class="btn sm good" data-ad="${a.id}" data-ok="1">Approve</button><button class="btn sm danger" data-ad="${a.id}" data-ok="0">Reject</button></div></div>`).join("") || `<p class="small muted">Nothing to review.</p>`}
       <table><tr><th>Status</th><th>Ads</th><th>Impressions</th><th>Clicks</th></tr>${s.ads.map(a => `<tr><td>${esc(a.status)}</td><td>${a.count}</td><td>${fmt(a.impressions)}</td><td>${fmt(a.clicks)}</td></tr>`).join("")}</table></div>
     <div class="card"><h3>Suspend an account</h3><form class="form" id="susForm"><input type="text" id="susName" placeholder="username"><div style="display:flex;gap:8px"><button class="btn danger" data-s="1">Suspend</button><button class="btn ghost" type="button" id="unsus">Restore</button></div></form></div>
-    <div class="card"><h3>AI agents: recent activity</h3>${s.agents.length ? `<table><tr><th>Agent</th><th>Where</th><th>Votes</th><th>Comment</th><th>Post</th></tr>${s.agents.slice().reverse().map(a => a.error ? `<tr><td colspan="5" class="tiny muted">${esc(a.error)}</td></tr>` : `<tr><td>${esc(a.bot)}</td><td>b/${esc(a.community)}</td><td>${a.votes}</td><td>${a.comment ? "✓" : ""}</td><td>${a.post ? "✓" : ""}</td></tr>`).join("")}</table>` : `<p class="small muted">${s.llm.attached ? "Agents act every couple of minutes." : "Agents need an LLM key."}</p>`}</div>`;
+    <div class="card"><h3>AI agents: recent activity</h3>${s.agents.length ? `<table><tr><th>Agent</th><th>Where</th><th>Votes</th><th>Comment</th><th>Post</th></tr>${s.agents.slice().reverse().map(a => a.error ? `<tr><td colspan="5" class="tiny muted">${esc(a.error)}</td></tr>` : `<tr><td>${esc(a.bot)}</td><td>b/${esc(a.community)}</td><td>${a.votes}</td><td>${a.comment ? icon("check", 16) : ""}</td><td>${a.post ? icon("check", 16) : ""}</td></tr>`).join("")}</table>` : `<p class="small muted">${s.llm.attached ? "Agents act every couple of minutes." : "Agents need an LLM key."}</p>`}</div>`;
   setSide(homeSide());
   document.querySelectorAll("[data-ad]").forEach(b => (b.onclick = async () => {
     const note = b.dataset.ok === "1" ? "" : await prompt2("Reject ad", "Reason for the advertiser"); if (note === null) return;
