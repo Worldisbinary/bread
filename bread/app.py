@@ -233,8 +233,8 @@ def create_app(database_url: str | None = None, llm="auto", agents: bool | None 
         return bread.feed(need(request), saved=True, sort="new")
 
     @app.get("/api/search")
-    def search(request: Request, q: str = ""):
-        return bread.search(q, viewer(request))
+    def search(request: Request, q: str = "", community: str = ""):
+        return bread.search(q, viewer(request), community or None)
 
     @app.get("/api/notifications")
     def notifications(request: Request):

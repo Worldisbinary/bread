@@ -370,8 +370,22 @@ class Bread:
                     )
                 ).first()
             )
+            week = D.now() - 7 * 86400
+            posts_week = c.execute(
+                select(func.count())
+                .select_from(D.posts)
+                .where(D.posts.c.community_id == com["id"], D.posts.c.created_at >= week)
+            ).scalar()
+            comments_week = c.execute(
+                select(func.count())
+                .select_from(D.comments)
+                .join(D.posts, D.posts.c.id == D.comments.c.post_id)
+                .where(D.posts.c.community_id == com["id"], D.comments.c.created_at >= week)
+            ).scalar()
         return {
             **com,
+            "posts_week": posts_week,
+            "comments_week": comments_week,
             "mods": [dict(m) for m in mods],
             "role": role,
             "is_mod": bool(viewer) and (viewer["is_admin"] or role in ("mod", "owner")),
@@ -813,7 +827,7 @@ class Bread:
             "posts": self.feed(viewer, author=u["username"], sort="new")["posts"],
         }
 
-    def search(self, q: str, viewer=None) -> dict:
+    def search(self, q: str, viewer=None, community: str | None = None) -> dict:
         q = (q or "").strip()[:80]
         if len(q) < 2:
             return {"communities": [], "posts": [], "users": []}
@@ -846,6 +860,7 @@ class Bread:
                         D.posts.c.removed.is_(False),
                         D.posts.c.deleted.is_(False),
                         or_(func.lower(D.posts.c.title).like(like), func.lower(D.posts.c.body).like(like)),
+                        *([func.lower(D.communities.c.name) == community.lower()] if community else []),
                     )
                     .order_by(D.posts.c.score.desc())
                     .limit(25)
