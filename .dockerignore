@@ -5,5 +5,6 @@ runs
 **/__pycache__
 .git
 *.db
-*.pkl
-rlife.egg-info
+*.egg-info
+.pytest_cache
+.ruff_cache

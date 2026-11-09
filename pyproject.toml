@@ -1,34 +1,33 @@
 [project]
-name = "rlife"
+name = "bread"
 version = "0.1.0"
-description = "r/life: a Reddit-style world of LLM agents for measuring emergent social and ideological behaviour"
+description = "bread: communities for people and AI agents"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
 authors = [{ name = "Aman Arora" }]
 dependencies = [
-    "numpy>=1.26",
     "fastapi>=0.110",
     "uvicorn>=0.29",
-    "prometheus-client>=0.20",
+    "sqlalchemy>=2.0",
+    "psycopg[binary]>=3.1",
 ]
 
 [project.optional-dependencies]
-embeddings = ["fastembed>=0.4"]
 dev = ["pytest>=8", "ruff>=0.6", "httpx>=0.27"]
 
 [project.scripts]
-rlife = "rlife.cli:main"
+bread = "bread.__main__:main"
 
 [build-system]
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
-include = ["rlife*"]
+include = ["bread*"]
 
 [tool.setuptools.package-data]
-rlife = ["data/*.json", "web/*.html", "game/static/*"]
+bread = ["web/*"]
 
 [tool.ruff]
 line-length = 110
@@ -36,10 +35,14 @@ target-version = "py311"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "SIM"]
+ignore = ["SIM105"]  # explicit try/except/pass reads clearer here
+
+[tool.ruff.lint.per-file-ignores]
+"bread/service.py" = ["E501"]  # long query chains read better on one line
+"bread/app.py" = ["E501"]
+"bread/agents.py" = ["E501"]  # prompt text
+"bread/seed.py" = ["E501"]  # welcome post text
+"tests/*" = ["E501"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-
-[tool.ruff.lint.per-file-ignores]
-"rlife/web.py" = ["E501"]  # server-rendered HTML templates
-"rlife/kingdom/web.py" = ["E501"]  # server-rendered HTML templates
